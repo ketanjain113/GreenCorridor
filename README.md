@@ -122,24 +122,38 @@ Frontend (React Map UI)
 ```bash
 git clone https://github.com/ketanjain113/GreenCorridor.git
 cd GreenCorridor
+```
 2️⃣ Install Dependencies
 Backend
+```bash
 cd backend
 npm install
+```
 Frontend
+
+```bash
 cd frontend
 npm install
+```
 ML (Python)
+```bash
 pip install ultralytics opencv-python numpy
+```
 ▶️ Running the Project
 Start Backend
+```bash
 cd backend
 npm start
+```
 Start Frontend
+```bash
 cd frontend
 npm run dev
+```
 Run ML Detection
+```bash
 python detect.py
+```
 📊 Demo Flow
 
 Upload video
@@ -176,7 +190,10 @@ GPS-based tracking
 
 👨‍💻 Contributors
 
-Ketan Jain
+[Ketan Jain]('github.com/ketanjain113')
+[Kavish Jain]('github.com/kavish200')
+[Sarthak Mahajan]('github.com/sarthakm811')
+[Prayagi Sahajwani]('github.com/prayagi')
 
 Team Green Corridor
 
