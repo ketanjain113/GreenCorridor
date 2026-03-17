@@ -44,7 +44,12 @@ def _safe_unlink(path: Path) -> None:
 
 def _transcode_to_web_mp4(input_path: Path, output_path: Path) -> bool:
     """Convert OpenCV mp4 output to H.264 + yuv420p for browser playback."""
-    ffmpeg_bin = shutil.which("ffmpeg")
+    ffmpeg_candidates = [
+        os.getenv("FFMPEG_BIN", "").strip(),
+        shutil.which("ffmpeg") or "",
+        str(Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe"),
+    ]
+    ffmpeg_bin = next((candidate for candidate in ffmpeg_candidates if candidate and Path(candidate).exists()), None)
     if not ffmpeg_bin:
         return False
 
@@ -90,6 +95,19 @@ def health() -> dict:
         "weights": str(DEFAULT_WEIGHTS_PATH),
         "alert_weights": str(DEFAULT_ALERT_WEIGHTS_PATH),
         "alert_vehicle_threshold": ALERT_VEHICLE_THRESHOLD,
+    }
+
+
+@app.get("/tracking/latest")
+def tracking_latest() -> dict:
+    if predictor is None:
+        raise HTTPException(status_code=503, detail="Model is not loaded")
+
+    return {
+        "status": "ok",
+        "tracked_objects": predictor.latest_tracked_objects,
+        "speed_eta": predictor.latest_speed_eta,
+        "distance_to_signal": predictor.next_signal_distance,
     }
 
 

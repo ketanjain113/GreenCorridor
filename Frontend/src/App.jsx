@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
+import { io } from "socket.io-client";
+import LiveEtaCountdown from "./LiveEtaCountdown";
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:4000";
 
@@ -42,6 +44,60 @@ const ROUTES = {
       { id: "B", pointIndex: 2, coord: [22.7205, 75.8624] },
       { id: "D", pointIndex: 4, coord: [22.7244, 75.8664] },
     ],
+  },
+};
+
+const STORY_PRESETS = {
+  normalFlow: {
+    label: "Normal Flow",
+    routeKey: "alpha",
+    startIndex: 0,
+    speedKmh: 52,
+    focus: "corridor",
+    signalOverrides: {
+      A: { signal: "Red", eta: 24 },
+      B: { signal: "Red", eta: 48 },
+      C: { signal: "Red", eta: 72 },
+    },
+    alerts: ["Emergency monitoring active", "Normal urban traffic profile"],
+  },
+  heavyTraffic: {
+    label: "Heavy Traffic",
+    routeKey: "beta",
+    startIndex: 1,
+    speedKmh: 28,
+    focus: "signal",
+    signalOverrides: {
+      A: { signal: "Red", eta: 18 },
+      B: { signal: "Red", eta: 26 },
+      D: { signal: "Red", eta: 38 },
+    },
+    alerts: ["Heavy congestion detected", "Priority corridor commands being queued"],
+  },
+  closeEta: {
+    label: "Close ETA",
+    routeKey: "alpha",
+    startIndex: 4,
+    speedKmh: 61,
+    focus: "signal",
+    signalOverrides: {
+      C: { signal: "Green", eta: 6 },
+      B: { signal: "Red", eta: 18 },
+    },
+    alerts: ["Emergency vehicle approaching intersection", "Signal pre-green activated"],
+  },
+  incidentAhead: {
+    label: "Incident Ahead",
+    routeKey: "beta",
+    startIndex: 2,
+    speedKmh: 35,
+    focus: "camera",
+    signalOverrides: {
+      A: { signal: "Green", eta: 9 },
+      B: { signal: "Red", eta: 16 },
+      D: { signal: "Red", eta: 28 },
+    },
+    alerts: ["Incident reported near next corridor node", "Reroute and lane clearance advisory issued"],
   },
 };
 
@@ -147,10 +203,104 @@ function getCameraCoord(points, pointIndex) {
   return points[Math.max(pointIndex - 1, 0)] || points[0];
 }
 
+const VEHICLE_VISUALS = {
+  ambulance: { label: "Ambulance", glyph: "🚑", color: "#ef4444" },
+  police: { label: "Police", glyph: "🚓", color: "#1d4ed8" },
+  fire_truck: { label: "Fire Truck", glyph: "🚒", color: "#f97316" },
+};
+
+function getVehicleVisual(vehicleType) {
+  return VEHICLE_VISUALS[vehicleType] || VEHICLE_VISUALS.ambulance;
+}
+
+function createVehicleIcon(vehicleType) {
+  const visual = getVehicleVisual(vehicleType);
+  return L.divIcon({
+    className: "emergency-vehicle-icon-wrap",
+    html: `<span class="emergency-vehicle-icon" style="background:${visual.color}">${visual.glyph}</span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  });
+}
+
+function interpolateCoord(fromCoord, toCoord, progress) {
+  return [
+    fromCoord[0] + (toCoord[0] - fromCoord[0]) * progress,
+    fromCoord[1] + (toCoord[1] - fromCoord[1]) * progress,
+  ];
+}
+
+function easeOutCubic(progress) {
+  return 1 - (1 - progress) ** 3;
+}
+
+function normalizeSignal(rawSignal) {
+  return String(rawSignal || "RED").toUpperCase() === "GREEN" ? "Green" : "Red";
+}
+
+function parseEtaSeconds(value) {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function getDistance(a, b) {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function resolveIntersectionIdFromUpdate(update, intersections) {
+  if (!update || !Array.isArray(intersections) || intersections.length === 0) {
+    return null;
+  }
+
+  if (update.intersection) {
+    const direct = String(update.intersection);
+    return intersections.some((item) => item.id === direct) ? direct : null;
+  }
+
+  if (!Array.isArray(update.position) || update.position.length < 2) {
+    return null;
+  }
+
+  const [x, y] = update.position;
+  if (!Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) {
+    return null;
+  }
+
+  const asCoord = [Number(x), Number(y)];
+  let closest = intersections[0];
+  let closestDistance = getDistance(closest.coord, asCoord);
+
+  for (const intersection of intersections.slice(1)) {
+    const dist = getDistance(intersection.coord, asCoord);
+    if (dist < closestDistance) {
+      closest = intersection;
+      closestDistance = dist;
+    }
+  }
+
+  return closest?.id || null;
+}
+
 function App() {
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
   const layerGroupRef = useRef(null);
+  const emergencyMarkerRef = useRef(null);
+  const emergencyMarkerCoordRef = useRef(null);
+  const emergencyMarkerRafRef = useRef(null);
+  const signalSocketRef = useRef(null);
   const navMapElementRef = useRef(null);
   const navMapRef = useRef(null);
   const navBaseLayerRef = useRef(null);
@@ -170,6 +320,9 @@ function App() {
   const outputVideoUrlRef = useRef(null);
   const outputVideoElementRef = useRef(null);
   const policePopupTimerRef = useRef(null);
+  const etaAlertTimerRef = useRef(null);
+  const etaAlertCooldownRef = useRef(0);
+  const etaCriticalActiveRef = useRef(false);
   const webcamIntentionalStopRef = useRef(false);
   const MAX_WEBCAM_RECONNECT_ATTEMPTS = 6;
   const [theme, setTheme] = useState(() => {
@@ -178,6 +331,10 @@ function App() {
   });
 
   const [selectedRoute, setSelectedRoute] = useState("alpha");
+  const [activeStoryPreset, setActiveStoryPreset] = useState("normalFlow");
+  const [demoModeEnabled, setDemoModeEnabled] = useState(false);
+  const [demoModeSaving, setDemoModeSaving] = useState(false);
+  const [vehicleType] = useState("ambulance");
   const [emergencyVehicleIndex, setEmergencyVehicleIndex] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
   const [camerasActive] = useState(true);
@@ -207,10 +364,27 @@ function App() {
   const [videoPredicting, setVideoPredicting] = useState(false);
   const [videoPredictError, setVideoPredictError] = useState("");
   const [policePopup, setPolicePopup] = useState({ visible: false, message: "" });
+  const [etaAlertBanner, setEtaAlertBanner] = useState({ visible: false, message: "" });
   const [presentationFocus, setPresentationFocus] = useState("corridor");
+  const [liveSignalByIntersection, setLiveSignalByIntersection] = useState({});
+  const [liveVehicleUpdate, setLiveVehicleUpdate] = useState(null);
 
   const route = ROUTES[selectedRoute];
   const currentCoord = route.points[emergencyVehicleIndex];
+  const liveCurrentCoord = useMemo(() => {
+    const position = liveVehicleUpdate?.position;
+    if (!Array.isArray(position) || position.length < 2) {
+      return currentCoord;
+    }
+
+    const lat = Number(position[0]);
+    const lon = Number(position[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return currentCoord;
+    }
+
+    return [lat, lon];
+  }, [currentCoord, liveVehicleUpdate]);
 
   const signalRows = useMemo(() => {
     const stepSeconds = 12;
@@ -228,10 +402,24 @@ function App() {
     });
   }, [emergencyVehicleIndex, route]);
 
+  const displaySignalRows = useMemo(() => {
+    return signalRows.map((row) => {
+      const override = liveSignalByIntersection[row.intersection];
+      if (!override) {
+        return row;
+      }
+      return {
+        ...row,
+        signal: override.signal,
+        eta: override.eta ?? row.eta,
+      };
+    });
+  }, [liveSignalByIntersection, signalRows]);
+
   const nearestNextSignal = useMemo(() => {
-    const next = signalRows.find((row) => row.etaSeconds > 0);
+    const next = displaySignalRows.find((row) => row.etaSeconds > 0);
     return next ? next.intersection : null;
-  }, [signalRows]);
+  }, [displaySignalRows]);
 
   const cameras = useMemo(() => {
     return [1, 2, 3].map((cameraId, index) => {
@@ -258,13 +446,13 @@ function App() {
   }, [cameras, route]);
 
   const analytics = useMemo(() => {
-    const greenCount = signalRows.filter((row) => row.signal === "Green").length;
+    const greenCount = displaySignalRows.filter((row) => row.signal === "Green").length;
     return {
       delayReduced: "32%",
-      coordinatedSignals: `${greenCount}/${signalRows.length}`,
+      coordinatedSignals: `${greenCount}/${displaySignalRows.length}`,
       responseSaved: "2.5 minutes",
     };
-  }, [signalRows]);
+  }, [displaySignalRows]);
 
   const emergencyVehicleEtaMinutes = Math.max((route.points.length - 1 - emergencyVehicleIndex) * 0.55, 0.5).toFixed(1);
   const navPrimaryStep = useMemo(() => {
@@ -284,10 +472,26 @@ function App() {
 
   const revealDelay = (ms) => ({ "--reveal-delay": `${ms}ms` });
   const detectedCameraCount = cameras.filter((camera) => camera.detected).length;
-  const greenSignalCount = signalRows.filter((row) => row.signal === "Green").length;
+  const greenSignalCount = displaySignalRows.filter((row) => row.signal === "Green").length;
   const nextSignalLabel = nearestNextSignal ? `Intersection ${nearestNextSignal}` : "Final corridor stretch";
   const activeDetection = cameras.find((camera) => camera.detected) || null;
-  const upcomingSignal = signalRows.find((row) => row.etaSeconds > 0) || null;
+  const upcomingSignal = displaySignalRows.find((row) => row.etaSeconds > 0) || null;
+  const upcomingEtaSeconds = useMemo(() => {
+    const wsEta = parseEtaSeconds(liveVehicleUpdate?.eta);
+    if (wsEta !== null) {
+      return wsEta;
+    }
+
+    if (!upcomingSignal) {
+      return null;
+    }
+
+    if (typeof upcomingSignal.etaSeconds === "number" && Number.isFinite(upcomingSignal.etaSeconds)) {
+      return upcomingSignal.etaSeconds;
+    }
+
+    return parseEtaSeconds(upcomingSignal.eta);
+  }, [liveVehicleUpdate, upcomingSignal]);
   const activeCameraNode = routeCameraNodes.find((camera) => camera.id === activeDetection?.id) || null;
   const upcomingIntersection = route.intersections.find((intersection) => intersection.id === upcomingSignal?.intersection) || null;
   const corridorProgress = Math.round((emergencyVehicleIndex / Math.max(route.points.length - 1, 1)) * 100);
@@ -319,6 +523,52 @@ function App() {
 
     return 0;
   }, [activeDetection, emergencyVehicleIndex, isRunning, route.points.length, upcomingSignal]);
+
+  useEffect(() => {
+    setLiveSignalByIntersection({});
+  }, [selectedRoute]);
+
+  useEffect(() => {
+    if (signalSocketRef.current) {
+      signalSocketRef.current.disconnect();
+      signalSocketRef.current = null;
+    }
+
+    const socket = io(BACKEND_BASE_URL, {
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionDelay: 300,
+      reconnectionAttempts: 10,
+    });
+
+    const onUpdate = (payload) => {
+      const intersectionId = resolveIntersectionIdFromUpdate(payload, route.intersections);
+      if (!intersectionId) {
+        return;
+      }
+
+      setLiveVehicleUpdate(payload);
+
+      setLiveSignalByIntersection((prev) => ({
+        ...prev,
+        [intersectionId]: {
+          signal: normalizeSignal(payload.signal),
+          eta: payload.eta ?? null,
+        },
+      }));
+    };
+
+    socket.on("update", onUpdate);
+    socket.on("vehicle:update", onUpdate);
+    signalSocketRef.current = socket;
+
+    return () => {
+      socket.off("update", onUpdate);
+      socket.off("vehicle:update", onUpdate);
+      socket.disconnect();
+      signalSocketRef.current = null;
+    };
+  }, [route.intersections]);
 
   const demoFlow = [
     {
@@ -361,10 +611,117 @@ function App() {
     activateScenario(selectedRoute);
   };
 
+  const applyStoryPreset = async (presetKey) => {
+    const preset = STORY_PRESETS[presetKey];
+    if (!preset) {
+      return;
+    }
+
+    setActiveStoryPreset(presetKey);
+    setSelectedRoute(preset.routeKey);
+    setEmergencyVehicleIndex(Math.max(0, preset.startIndex));
+    setSpeedKmh(preset.speedKmh);
+    setIsRunning(true);
+    setPresentationFocus(preset.focus);
+    setAlerts(preset.alerts);
+    setLogs((prev) => [{ time: nowTime(), text: `${preset.label} preset activated` }, ...prev].slice(0, 10));
+
+    const seededCoord = ROUTES[preset.routeKey]?.points?.[Math.max(0, preset.startIndex)] || route.points[0];
+    const presetEtas = Object.values(preset.signalOverrides || {})
+      .map((item) => parseEtaSeconds(item?.eta))
+      .filter((value) => typeof value === "number");
+    const seededEta = presetEtas.length ? Math.min(...presetEtas) : null;
+    const seededSignal = seededEta !== null && seededEta < 10 ? "GREEN" : "RED";
+    setLiveVehicleUpdate({
+      vehicle: "ambulance",
+      eta: seededEta,
+      signal: seededSignal,
+      position: seededCoord,
+    });
+
+    // Route change clears signal overrides first; re-apply preset overrides after that render cycle.
+    window.setTimeout(() => {
+      setLiveSignalByIntersection(preset.signalOverrides);
+    }, 0);
+
+    if (!demoModeEnabled && !demoModeSaving) {
+      setDemoModeSaving(true);
+      try {
+        const response = await fetch(`${BACKEND_BASE_URL}/api/demo-mode`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: true }),
+        });
+
+        if (response.ok) {
+          const payload = await response.json();
+          setDemoModeEnabled(Boolean(payload?.enabled));
+        }
+      } catch {
+        // Ignore demo toggle failure; preset still applies to local narrative.
+      } finally {
+        setDemoModeSaving(false);
+      }
+    }
+  };
+
+  const toggleDemoMode = async () => {
+    if (demoModeSaving) {
+      return;
+    }
+
+    const nextEnabled = !demoModeEnabled;
+    setDemoModeSaving(true);
+    try {
+      const response = await fetch(`${BACKEND_BASE_URL}/api/demo-mode`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ enabled: nextEnabled }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not switch demo mode");
+      }
+
+      const payload = await response.json();
+      setDemoModeEnabled(Boolean(payload?.enabled));
+      setLogs((prev) => [
+        { time: nowTime(), text: payload?.enabled ? "Demo mode enabled" : "Demo mode disabled" },
+        ...prev,
+      ].slice(0, 10));
+    } catch (error) {
+      setLogs((prev) => [
+        { time: nowTime(), text: error?.message || "Failed to switch demo mode" },
+        ...prev,
+      ].slice(0, 10));
+    } finally {
+      setDemoModeSaving(false);
+    }
+  };
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     window.localStorage.setItem("traffic-dashboard-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`${BACKEND_BASE_URL}/api/demo-mode`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!cancelled && payload) {
+          setDemoModeEnabled(Boolean(payload.enabled));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) {
@@ -399,8 +756,17 @@ function App() {
       opacity: 0.8,
     }).addTo(group);
 
+    const traversedRoute = route.points.slice(0, Math.max(emergencyVehicleIndex + 1, 1));
+    if (traversedRoute.length > 1) {
+      L.polyline(traversedRoute, {
+        color: "#22c55e",
+        weight: 6,
+        opacity: 0.9,
+      }).addTo(group);
+    }
+
     route.intersections.forEach((intersection) => {
-      const row = signalRows.find((item) => item.intersection === intersection.id);
+      const row = displaySignalRows.find((item) => item.intersection === intersection.id);
       const color = row && row.signal === "Green" ? "#1cae70" : "#e45252";
       L.circleMarker(intersection.coord, {
         radius: 9,
@@ -454,7 +820,7 @@ function App() {
     }
 
     if (upcomingIntersection) {
-      L.polyline([currentCoord, upcomingIntersection.coord], {
+      L.polyline([liveCurrentCoord, upcomingIntersection.coord], {
         color: "#22c55e",
         weight: 5,
         opacity: 0.8,
@@ -470,19 +836,78 @@ function App() {
     })
       .bindTooltip(HOSPITAL.name)
       .addTo(group);
+  }, [activeCameraNode, displaySignalRows, emergencyVehicleIndex, liveCurrentCoord, route, routeCameraNodes, upcomingIntersection]);
 
-    L.circleMarker(currentCoord, {
-      radius: 11,
-      color: "#ffffff",
-      fillColor: "#ef4444",
-      fillOpacity: 1,
-      weight: 3,
-    })
-      .bindTooltip("Emergency Vehicle", { direction: "top" })
-      .addTo(group);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !liveCurrentCoord) {
+      return;
+    }
 
-    mapRef.current.panTo(currentCoord, { animate: true, duration: 0.8 });
-  }, [activeCameraNode, currentCoord, route, routeCameraNodes, signalRows, upcomingIntersection]);
+    const visual = getVehicleVisual(vehicleType);
+    const nextCoord = liveCurrentCoord;
+    const marker = emergencyMarkerRef.current;
+
+    if (!marker) {
+      const created = L.marker(nextCoord, {
+        icon: createVehicleIcon(vehicleType),
+        zIndexOffset: 1200,
+      })
+        .bindTooltip(`${visual.label} (live)`, { direction: "top" })
+        .addTo(map);
+      emergencyMarkerRef.current = created;
+      emergencyMarkerCoordRef.current = nextCoord;
+      map.panTo(nextCoord, { animate: true, duration: 0.7 });
+      return;
+    }
+
+    marker.setIcon(createVehicleIcon(vehicleType));
+    marker.setTooltipContent(`${visual.label} (live)`);
+
+    const previousCoord = emergencyMarkerCoordRef.current || nextCoord;
+    if (previousCoord[0] === nextCoord[0] && previousCoord[1] === nextCoord[1]) {
+      return;
+    }
+
+    if (emergencyMarkerRafRef.current) {
+      window.cancelAnimationFrame(emergencyMarkerRafRef.current);
+      emergencyMarkerRafRef.current = null;
+    }
+
+    const animationDurationMs = 900;
+    const startedAt = performance.now();
+
+    const animate = (now) => {
+      const elapsed = now - startedAt;
+      const linearProgress = Math.min(elapsed / animationDurationMs, 1);
+      const easedProgress = easeOutCubic(linearProgress);
+      const interpolated = interpolateCoord(previousCoord, nextCoord, easedProgress);
+      marker.setLatLng(interpolated);
+
+      if (linearProgress < 1) {
+        emergencyMarkerRafRef.current = window.requestAnimationFrame(animate);
+        return;
+      }
+
+      emergencyMarkerCoordRef.current = nextCoord;
+      emergencyMarkerRafRef.current = null;
+    };
+
+    emergencyMarkerRafRef.current = window.requestAnimationFrame(animate);
+    map.panTo(nextCoord, { animate: true, duration: 0.9 });
+  }, [liveCurrentCoord, vehicleType]);
+
+  useEffect(() => {
+    return () => {
+      if (emergencyMarkerRafRef.current) {
+        window.cancelAnimationFrame(emergencyMarkerRafRef.current);
+      }
+      if (emergencyMarkerRef.current) {
+        emergencyMarkerRef.current.remove();
+        emergencyMarkerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -559,6 +984,41 @@ function App() {
       "Clear the lane and prioritize green corridor",
     ]);
   }, [nearestNextSignal, isRunning]);
+
+  useEffect(() => {
+    const isCriticalEta = typeof upcomingEtaSeconds === "number" && upcomingEtaSeconds > 0 && upcomingEtaSeconds < 10;
+
+    if (!isCriticalEta) {
+      etaCriticalActiveRef.current = false;
+      return;
+    }
+
+    if (etaCriticalActiveRef.current) {
+      return;
+    }
+
+    const now = Date.now();
+    const cooldownMs = 12000;
+    if (now - etaAlertCooldownRef.current < cooldownMs) {
+      etaCriticalActiveRef.current = true;
+      return;
+    }
+
+    etaCriticalActiveRef.current = true;
+    etaAlertCooldownRef.current = now;
+    setEtaAlertBanner({
+      visible: true,
+      message: "⚠ Emergency vehicle approaching — clear lane",
+    });
+
+    if (etaAlertTimerRef.current) {
+      window.clearTimeout(etaAlertTimerRef.current);
+    }
+
+    etaAlertTimerRef.current = window.setTimeout(() => {
+      setEtaAlertBanner((prev) => ({ ...prev, visible: false }));
+    }, 4500);
+  }, [upcomingEtaSeconds]);
 
   useEffect(() => {
     const revealItems = document.querySelectorAll("[data-reveal]");
@@ -1017,6 +1477,14 @@ function App() {
     }, 5000);
   };
 
+  const dismissEtaAlertBanner = () => {
+    if (etaAlertTimerRef.current) {
+      window.clearTimeout(etaAlertTimerRef.current);
+      etaAlertTimerRef.current = null;
+    }
+    setEtaAlertBanner((prev) => ({ ...prev, visible: false }));
+  };
+
   const runVideoPrediction = async () => {
     if (!videoUploadFile || videoPredicting) {
       return;
@@ -1111,6 +1579,10 @@ function App() {
       if (policePopupTimerRef.current) {
         window.clearTimeout(policePopupTimerRef.current);
       }
+
+      if (etaAlertTimerRef.current) {
+        window.clearTimeout(etaAlertTimerRef.current);
+      }
     };
   }, []);
 
@@ -1149,6 +1621,20 @@ function App() {
         <aside className="police-popup" role="status" aria-live="polite">
           <strong>Police Alert</strong>
           <span>{policePopup.message}</span>
+        </aside>
+      ) : null}
+
+      {etaAlertBanner.visible ? (
+        <aside className="eta-alert-banner" role="alert" aria-live="assertive">
+          <span>{etaAlertBanner.message}</span>
+          <button
+            type="button"
+            className="eta-alert-dismiss"
+            onClick={dismissEtaAlertBanner}
+            aria-label="Dismiss emergency ETA alert"
+          >
+            Dismiss
+          </button>
         </aside>
       ) : null}
 
@@ -1226,6 +1712,40 @@ function App() {
                   </div>
 
                   <div className="solution-toolbar-block">
+                    <span className="solution-toolbar-label">Story Presets</span>
+                    <div className="solution-preset-grid">
+                      {Object.entries(STORY_PRESETS).map(([presetKey, preset]) => (
+                        <button
+                          key={presetKey}
+                          type="button"
+                          className={`solution-switch-btn solution-preset-btn${activeStoryPreset === presetKey ? " active" : ""}`}
+                          onClick={() => applyStoryPreset(presetKey)}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="solution-toolbar-block">
+                    <span className="solution-toolbar-label">Data Source</span>
+                    <div className="solution-route-switcher">
+                      <button
+                        type="button"
+                        className={`solution-switch-btn${demoModeEnabled ? " active" : ""}`}
+                        onClick={toggleDemoMode}
+                        disabled={demoModeSaving}
+                      >
+                        {demoModeSaving
+                          ? "Switching..."
+                          : demoModeEnabled
+                            ? "Demo Mode ON"
+                            : "Demo Mode OFF"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="solution-toolbar-block">
                     <span className="solution-toolbar-label">Map focus</span>
                     <div className="solution-focus-toolbar">
                       <button type="button" className={`solution-focus-btn${presentationFocus === "corridor" ? " active" : ""}`} onClick={() => setPresentationFocus("corridor")}>
@@ -1247,6 +1767,14 @@ function App() {
                     <article>
                       <span>Corridor Progress</span>
                       <strong>{corridorProgress}%</strong>
+                    </article>
+                    <article>
+                      <span>Emergency Feed</span>
+                      <strong>
+                        {liveVehicleUpdate
+                          ? `${String(liveVehicleUpdate.vehicle || "Vehicle").toUpperCase()} • ETA ${upcomingEtaSeconds ?? "--"}s`
+                          : "Waiting for live update"}
+                      </strong>
                     </article>
                     <article>
                       <span>Active Camera</span>
@@ -1347,6 +1875,9 @@ function App() {
 
               <section className="panel signal-panel reveal" data-reveal style={revealDelay(170)}>
                 <h2>Automatic Traffic Signal Control</h2>
+                <div className="signal-live-eta-wrap">
+                  <LiveEtaCountdown etaSeconds={upcomingEtaSeconds} />
+                </div>
                 <table>
                   <thead>
                     <tr>
@@ -1356,10 +1887,11 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {signalRows.map((row) => (
+                    {displaySignalRows.map((row) => (
                       <tr key={row.intersection}>
                         <td>{row.intersection}</td>
                         <td>
+                          <span className={`signal-dot ${row.signal.toLowerCase()}`} aria-hidden="true" />
                           <span className={`pill ${row.signal.toLowerCase()}`}>{row.signal}</span>
                         </td>
                         <td>{row.eta}</td>
@@ -1488,7 +2020,7 @@ function App() {
                 </article>
                 <article className="hero-metric" role="listitem">
                   <span>Signal Priority Window</span>
-                  <strong>{nextSignalLabel} • {greenSignalCount}/{signalRows.length} green</strong>
+                  <strong>{nextSignalLabel} • {greenSignalCount}/{displaySignalRows.length} green</strong>
                 </article>
               </div>
             </div>
@@ -1718,6 +2250,25 @@ function App() {
 
               </div>
             )}
+          </div>
+
+          <div className="nav-status-rail" aria-label="Navigation status">
+            <article className="nav-status-card">
+              <span>Mode</span>
+              <strong>{navNavigating ? "Turn-by-turn" : "Planning"}</strong>
+            </article>
+            <article className="nav-status-card">
+              <span>Start</span>
+              <strong>{navUserLocation ? "GPS Locked" : "Emergency Vehicle"}</strong>
+            </article>
+            <article className="nav-status-card nav-status-card-wide">
+              <span>Destination</span>
+              <strong>{navDestination ? navDestination.name.split(",")[0] : "Select on map"}</strong>
+            </article>
+            <article className="nav-status-card">
+              <span>Route</span>
+              <strong>{navRoute ? `${(navRoute.distance / 1000).toFixed(1)} km` : "--"}</strong>
+            </article>
           </div>
 
           <div className="nav-map-area" ref={navMapElementRef} />

@@ -5,6 +5,7 @@ import cors from "cors";
 import express from "express";
 import FormData from "form-data";
 import multer from "multer";
+import { Server as SocketIOServer } from "socket.io";
 import WebSocket, { WebSocketServer } from "ws";
 
 const app = express();
@@ -15,6 +16,24 @@ const FASTAPI_BASE_URL = process.env.FASTAPI_BASE_URL || "http://127.0.0.1:8000"
 const FASTAPI_WS_URL =
   process.env.FASTAPI_WS_URL ||
   FASTAPI_BASE_URL.replace("http://", "ws://").replace("https://", "wss://");
+const TRACKING_EMIT_INTERVAL_MS = Math.max(Number(process.env.TRACKING_EMIT_INTERVAL_MS || 200), 50);
+const DEMO_ROUTE_COORDS = [
+  [22.7196, 75.8577],
+  [22.7209, 75.8602],
+  [22.7224, 75.8629],
+  [22.724, 75.8655],
+  [22.7257, 75.8669],
+  [22.7271, 75.8677],
+  [22.7281, 75.8685],
+];
+
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+  transports: ["websocket", "polling"],
+});
 
 app.use(cors());
 app.use(express.json());
@@ -89,6 +108,148 @@ async function getAxiosErrorDetails(error, fallbackMessage) {
 
   return String(error?.message || fallbackMessage);
 }
+
+function getCenterFromBbox(bbox) {
+  if (!Array.isArray(bbox) || bbox.length < 4) {
+    return [0, 0];
+  }
+
+  const [x1, y1, x2, y2] = bbox;
+  return [Math.round((x1 + x2) / 2), Math.round((y1 + y2) / 2)];
+}
+
+function toVehicleUpdates(trackingPayload) {
+  const trackedObjects = Array.isArray(trackingPayload?.tracked_objects)
+    ? trackingPayload.tracked_objects
+    : [];
+  const speedEta = Array.isArray(trackingPayload?.speed_eta) ? trackingPayload.speed_eta : [];
+  const byId = new Map(speedEta.map((item) => [Number(item?.id), item]));
+
+  return trackedObjects
+    .filter((item) => Number.isFinite(Number(item?.id)) && Number(item.id) >= 0)
+    .map((item) => {
+      const id = Number(item.id);
+      const speedEtaRow = byId.get(id);
+      return {
+        vehicle: String(item.label || "unknown"),
+        eta: speedEtaRow?.eta ?? null,
+        signal: String(speedEtaRow?.signal || "RED"),
+        position: getCenterFromBbox(item.bbox),
+      };
+    });
+}
+
+let trackingTimer = null;
+let trackingInFlight = false;
+let demoModeEnabled = process.env.DEMO_MODE === "1";
+let demoTick = 0;
+
+function emitTrackingUpdates(updates) {
+  for (const update of updates) {
+    io.emit("vehicle:update", update);
+    io.emit("update", update);
+  }
+
+  io.emit("vehicle:batch", {
+    ts: Date.now(),
+    count: updates.length,
+    updates,
+  });
+}
+
+function getDemoUpdates() {
+  const routeIndex = demoTick % DEMO_ROUTE_COORDS.length;
+  const position = DEMO_ROUTE_COORDS[routeIndex];
+  const remainingSteps = Math.max(DEMO_ROUTE_COORDS.length - 1 - routeIndex, 0);
+  const eta = remainingSteps * 2;
+  const signal = eta > 0 && eta < 10 ? "GREEN" : "RED";
+  demoTick += 1;
+
+  return [
+    {
+      vehicle: "ambulance",
+      eta,
+      signal,
+      position,
+    },
+  ];
+}
+
+function startTrackingEmitter() {
+  if (trackingTimer) {
+    return;
+  }
+
+  trackingTimer = setInterval(async () => {
+    if (trackingInFlight) {
+      return;
+    }
+
+    if (demoModeEnabled) {
+      emitTrackingUpdates(getDemoUpdates());
+      return;
+    }
+
+    trackingInFlight = true;
+    try {
+      const response = await axios.get(`${FASTAPI_BASE_URL}/tracking/latest`, {
+        timeout: TRACKING_EMIT_INTERVAL_MS,
+      });
+      const updates = toVehicleUpdates(response.data);
+      emitTrackingUpdates(updates);
+    } catch {
+      // Keep the emitter alive; transient FastAPI errors should not crash Node.
+    } finally {
+      trackingInFlight = false;
+    }
+  }, TRACKING_EMIT_INTERVAL_MS);
+}
+
+function stopTrackingEmitter() {
+  if (!trackingTimer) {
+    return;
+  }
+
+  clearInterval(trackingTimer);
+  trackingTimer = null;
+}
+
+io.on("connection", (socket) => {
+  socket.emit("tracking:config", {
+    intervalMs: TRACKING_EMIT_INTERVAL_MS,
+    demoModeEnabled,
+  });
+
+  startTrackingEmitter();
+
+  socket.on("disconnect", () => {
+    if (io.engine.clientsCount === 0) {
+      stopTrackingEmitter();
+    }
+  });
+});
+
+app.get("/api/demo-mode", (_req, res) => {
+  res.json({
+    enabled: demoModeEnabled,
+    intervalMs: TRACKING_EMIT_INTERVAL_MS,
+  });
+});
+
+app.post("/api/demo-mode", (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  demoModeEnabled = enabled;
+  if (enabled) {
+    demoTick = 0;
+  }
+
+  io.emit("demo-mode", { enabled: demoModeEnabled });
+
+  res.json({
+    enabled: demoModeEnabled,
+    message: demoModeEnabled ? "Demo mode enabled" : "Demo mode disabled",
+  });
+});
 
 app.get("/health", async (_req, res) => {
   try {
@@ -334,4 +495,5 @@ server.on("error", (error) => {
 server.listen(PORT, () => {
   console.log(`Node backend listening on http://127.0.0.1:${PORT}`);
   console.log(`Proxy target FastAPI: ${FASTAPI_BASE_URL}`);
+  console.log(`Socket.IO enabled at ws://127.0.0.1:${PORT}/socket.io`);
 });

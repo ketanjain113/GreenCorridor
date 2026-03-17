@@ -1463,6 +1463,18 @@ h1 {
   flex-wrap: wrap;
 }
 
+.solution-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.solution-preset-btn {
+  justify-content: center;
+  min-height: 38px;
+  padding-inline: 0.5rem;
+}
+
 .solution-switch-btn,
 .solution-focus-btn {
   border: 1px solid #b8cee3;
@@ -1790,6 +1802,41 @@ table,
   line-height: 1.6;
 }
 
+.emergency-vehicle-icon-wrap {
+  background: transparent;
+  border: 0;
+}
+
+.emergency-vehicle-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 2px solid #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  box-shadow: 0 8px 18px rgba(10, 30, 60, 0.32);
+  animation: ambulance-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ambulance-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(10, 30, 60, 0.32);
+  }
+
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 10px 22px rgba(10, 30, 60, 0.42);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 8px 18px rgba(10, 30, 60, 0.32);
+  }
+}
+
 .control-grid {
   margin-top: 0.8rem;
   display: grid;
@@ -1904,6 +1951,68 @@ tr:last-child td {
 .pill.red {
   background: #ffe0e0;
   color: #8b2929;
+}
+
+.signal-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+.signal-dot.green {
+  background: #17a34a;
+}
+
+.signal-dot.red {
+  background: #e03a3a;
+}
+
+.signal-live-eta-wrap {
+  margin-top: 0.7rem;
+  margin-bottom: 0.6rem;
+}
+
+.live-eta-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 190px;
+  border-radius: 999px;
+  background: #e8f8ee;
+  color: #0e7a45;
+  border: 1px solid #b9e6ca;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  font-size: 0.95rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.live-eta-pill.is-critical {
+  background: #ffe7e7;
+  color: #b42323;
+  border-color: #f0a7a7;
+  animation: live-eta-critical-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes live-eta-critical-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(228, 82, 82, 0.2);
+  }
+
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 18px rgba(228, 82, 82, 0.35);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(228, 82, 82, 0.2);
+  }
 }
 
 .camera-panel {
@@ -2316,6 +2425,81 @@ tr:last-child td {
   background: linear-gradient(135deg, #472012, #5e2a17);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
   color: #ffd4c3;
+}
+
+.eta-alert-banner {
+  position: fixed;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1250;
+  width: min(620px, calc(100vw - 24px));
+  border-radius: 14px;
+  border: 1px solid #f0b0b0;
+  background: linear-gradient(130deg, #fff0f0, #ffe3e3);
+  color: #8f1f1f;
+  padding: 0.8rem 1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  box-shadow: 0 14px 34px rgba(116, 20, 20, 0.24);
+  animation: eta-alert-slide-in 0.28s ease-out, eta-alert-glow 1s ease-in-out infinite;
+}
+
+.eta-alert-dismiss {
+  border: 1px solid rgba(143, 31, 31, 0.35);
+  background: rgba(255, 255, 255, 0.8);
+  color: #7d1a1a;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+}
+
+.eta-alert-dismiss:hover {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+@keyframes eta-alert-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes eta-alert-glow {
+  0% {
+    box-shadow: 0 14px 34px rgba(116, 20, 20, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 16px 36px rgba(116, 20, 20, 0.34);
+  }
+
+  100% {
+    box-shadow: 0 14px 34px rgba(116, 20, 20, 0.2);
+  }
+}
+
+:root[data-theme="dark"] .eta-alert-banner {
+  border-color: #7a2929;
+  background: linear-gradient(130deg, #4a1717, #612020);
+  color: #ffe3e3;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme="dark"] .eta-alert-dismiss {
+  border-color: rgba(255, 227, 227, 0.3);
+  background: rgba(0, 0, 0, 0.25);
+  color: #ffe3e3;
 }
 
 .analytics-panel {
@@ -2898,7 +3082,7 @@ tr:last-child td {
 
 .nav-side-tab {
   position: absolute;
-  top: 96px;
+  top: 164px;
   right: 16px;
   width: min(390px, calc(100% - 32px));
   z-index: 12;
@@ -3010,6 +3194,52 @@ tr:last-child td {
   position: absolute;
   inset: 0;
   z-index: 1;
+}
+
+.nav-status-rail {
+  position: absolute;
+  top: 94px;
+  left: 16px;
+  right: 16px;
+  z-index: 9;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  pointer-events: none;
+}
+
+.nav-status-card {
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 0.5rem 0.7rem;
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 0.12rem;
+}
+
+.nav-status-card span {
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.nav-status-card strong {
+  font-size: 0.84rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-status-card-wide {
+  grid-column: span 1;
 }
 
 .nav-fab {
@@ -3200,6 +3430,19 @@ tr:last-child td {
   .nav-search-shell {
     min-height: 50px;
     padding-left: 0.75rem;
+
+  .nav-status-rail {
+    top: 86px;
+    left: 12px;
+    right: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .nav-status-card {
+    min-height: 52px;
+    padding: 0.45rem 0.6rem;
+  }
   }
 
   .nav-bottombar {
@@ -3254,7 +3497,7 @@ tr:last-child td {
   }
 
   .nav-side-tab {
-    top: 76px;
+    top: 152px;
     right: 12px;
     width: min(340px, calc(100% - 24px));
   }
