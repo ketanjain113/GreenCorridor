@@ -147,7 +147,7 @@ ML (Python)
 pip install ultralytics opencv-python numpy
 ```
 
-###▶️ Running the Project
+### ▶️ Running the Project
 
 Start Backend
 ```bash
@@ -166,7 +166,7 @@ Run ML Detection
 python detect.py
 ```
 
-###📊 Demo Flow
+### 📊 Demo Flow
 
 1. Upload video
 2. Emergency vehicle detected
@@ -174,34 +174,34 @@ python detect.py
 4. Signal turns GREEN
 5. Alert appears
 
-###🏆 Key Innovation
+### 🏆 Key Innovation
 
-Predictive Traffic Control using ETA instead of reactive systems
+- Predictive Traffic Control using ETA instead of reactive systems
 
-Unlike traditional systems, Green Corridor:
+- Unlike traditional systems, Green Corridor:
 
-Activates signals before arrival
+- Activates signals before arrival
 
-Uses AI-based prediction
+- Uses AI-based prediction
 
-Works in real-time
+- Works in real-time
 
-###📈 Future Enhancements
+### 📈 Future Enhancements
 
-Multi-vehicle priority system
+- Multi-vehicle priority system
 
-Integration with real traffic cameras
+- Integration with real traffic cameras
 
-IoT-based signal automation
+- IoT-based signal automation
 
-GPS-based tracking
+- GPS-based tracking
 
-###👨‍💻 Contributors
+### 👨‍💻 Contributors
 
-[Ketan Jain]('github.com/ketanjain113)
+[Ketan Jain]('github.com/ketanjain113),
 
-[Kavish Jain]('github.com/kavish200)
+[Kavish Jain]('github.com/kavish200),
 
-[Sarthak Mahajan]('github.com/sarthakm811)
+[Sarthak Mahajan]('github.com/sarthakm811),
 
 [Prayagi Sahajwani]('github.com/prayagi)
