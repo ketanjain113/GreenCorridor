@@ -122,12 +122,7 @@ async def ws_live_prediction(websocket: WebSocket) -> None:
                 await websocket.send_text("decode_error")
                 continue
 
-            try:
-                annotated = await run_in_threadpool(predictor.annotate_frame, frame)
-            except Exception:
-                await websocket.send_text("inference_error")
-                continue
-
+            annotated = predictor.annotate_frame(frame)
             ok, encoded = cv2.imencode(".jpg", annotated)
             if not ok:
                 await websocket.send_text("encode_error")
@@ -135,8 +130,6 @@ async def ws_live_prediction(websocket: WebSocket) -> None:
 
             await websocket.send_bytes(encoded.tobytes())
     except WebSocketDisconnect:
-        return
-    except Exception:
         return
 
 
@@ -197,6 +190,8 @@ async def predict_video_file(
     if predictor is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
 
+    print(f"[fastapi video/file] request received filename={file.filename} type={file.content_type}")
+
     if file.content_type and not file.content_type.startswith("video/"):
         raise HTTPException(status_code=400, detail="Uploaded file is not a video")
 
@@ -209,6 +204,8 @@ async def predict_video_file(
             raise HTTPException(status_code=400, detail="Uploaded video is empty")
         input_temp.write(payload)
 
+    print(f"[fastapi video/file] upload saved to {input_path} bytes={len(payload)}")
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as output_temp:
         output_path = Path(output_temp.name)
 
@@ -216,16 +213,20 @@ async def predict_video_file(
         output_web_path = Path(output_web_temp.name)
 
     try:
-        # Offload CPU-bound video processing so the API loop stays responsive.
+        print(f"[fastapi video/file] starting model inference -> {output_path}")
         await run_in_threadpool(predictor.process_video, input_path, output_path)
+        print(f"[fastapi video/file] inference complete, starting transcode -> {output_web_path}")
+        web_ready = await run_in_threadpool(_transcode_to_web_mp4, output_path, output_web_path)
+        print(f"[fastapi video/file] transcode complete web_ready={web_ready}")
     except Exception as exc:
         _safe_unlink(input_path)
         _safe_unlink(output_path)
         _safe_unlink(output_web_path)
-        raise HTTPException(status_code=400, detail=f"Video processing failed: {exc}") from exc
+        print(f"Video processing failed for {file.filename}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Video processing failed: {exc}") from exc
 
-    web_ready = await run_in_threadpool(_transcode_to_web_mp4, output_path, output_web_path)
     serving_path = output_web_path if web_ready else output_path
+    print(f"[fastapi video/file] returning {serving_path}")
 
     _safe_unlink(input_path)
     background_tasks.add_task(_safe_unlink, output_path)

@@ -10,6 +10,7 @@ from ultralytics import YOLO
 
 DEFAULT_CONFIDENCE = 0.35
 DEFAULT_WEIGHTS_PATH = Path(__file__).resolve().with_name("best.pt")
+DEFAULT_IMAGE_SIZE = 640
 
 
 class VideoPredictor:
@@ -20,6 +21,7 @@ class VideoPredictor:
         weights_path: Optional[str | Path] = None,
         confidence: float = DEFAULT_CONFIDENCE,
         device: Optional[str | int] = None,
+        imgsz: int = DEFAULT_IMAGE_SIZE,
     ) -> None:
         resolved_weights = Path(weights_path) if weights_path else DEFAULT_WEIGHTS_PATH
         if not resolved_weights.exists():
@@ -28,6 +30,8 @@ class VideoPredictor:
         self.weights_path = resolved_weights
         self.confidence = confidence
         self.device = device if device is not None else (0 if torch.cuda.is_available() else "cpu")
+        self.imgsz = imgsz
+        self.use_half = self.device != "cpu"
         self.model = YOLO(str(self.weights_path))
 
     def annotate_frame(self, frame):
@@ -36,6 +40,9 @@ class VideoPredictor:
             frame,
             conf=self.confidence,
             device=self.device,
+            imgsz=self.imgsz,
+            half=self.use_half,
+            max_det=20,
             verbose=False,
         )
         annotated = results[0].plot()

@@ -139,10 +139,17 @@ app.post("/api/predict/frame", upload.single("frame"), async (req, res) => {
 });
 
 app.post("/api/predict/video/file", upload.single("video"), async (req, res) => {
+  console.log("[video/file] request received");
+
   if (!req.file) {
+    console.log("[video/file] missing file field");
     res.status(400).json({ message: "Missing 'video' file field" });
     return;
   }
+
+  console.log(
+    `[video/file] upload parsed name=${req.file.originalname} size=${req.file.size} type=${req.file.mimetype}`,
+  );
 
   if (req.file.mimetype && !req.file.mimetype.startsWith("video/")) {
     res.status(400).json({
@@ -159,6 +166,8 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
       contentType: req.file.mimetype || "video/mp4",
     });
 
+    console.log("[video/file] forwarding upload to FastAPI");
+
     const response = await axios.post(`${FASTAPI_BASE_URL}/predict/video/file`, form, {
       headers: form.getHeaders(),
       responseType: "stream",
@@ -168,6 +177,7 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
     });
 
     const disposition = response.headers["content-disposition"];
+    console.log("[video/file] FastAPI responded, piping video back to frontend");
     if (disposition) {
       res.setHeader("Content-Disposition", disposition);
     } else {
@@ -177,6 +187,7 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
     res.setHeader("Content-Type", response.headers["content-type"] || "video/mp4");
     response.data.pipe(res);
   } catch (error) {
+    console.error("[video/file] failed:", error?.message || error);
     const details = await getAxiosErrorDetails(error, "Video file inference failed");
     res.status(502).json({
       message: "Video file inference failed",

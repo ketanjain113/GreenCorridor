@@ -143,6 +143,10 @@ function getStepGlyph(step) {
   return "↑";
 }
 
+function getCameraCoord(points, pointIndex) {
+  return points[Math.max(pointIndex - 1, 0)] || points[0];
+}
+
 function App() {
   const mapElementRef = useRef(null);
   const mapRef = useRef(null);
@@ -164,6 +168,7 @@ function App() {
   const webcamFrameUrlRef = useRef(null);
   const uploadPreviewUrlRef = useRef(null);
   const outputVideoUrlRef = useRef(null);
+  const outputVideoElementRef = useRef(null);
   const webcamIntentionalStopRef = useRef(false);
   const MAX_WEBCAM_RECONNECT_ATTEMPTS = 6;
   const [theme, setTheme] = useState(() => {
@@ -197,6 +202,7 @@ function App() {
   const [videoPredictionUrl, setVideoPredictionUrl] = useState("");
   const [videoPredicting, setVideoPredicting] = useState(false);
   const [videoPredictError, setVideoPredictError] = useState("");
+  const [presentationFocus, setPresentationFocus] = useState("corridor");
 
   const route = ROUTES[selectedRoute];
   const currentCoord = route.points[emergencyVehicleIndex];
@@ -235,6 +241,17 @@ function App() {
     });
   }, [emergencyVehicleIndex, camerasActive]);
 
+  const routeCameraNodes = useMemo(() => {
+    return route.intersections.map((intersection, index) => {
+      const camera = cameras[index] || { id: `Camera_${index + 1}`, detected: false, confidence: 0 };
+      return {
+        ...camera,
+        targetSignal: intersection.id,
+        coord: getCameraCoord(route.points, intersection.pointIndex),
+      };
+    });
+  }, [cameras, route]);
+
   const analytics = useMemo(() => {
     const greenCount = signalRows.filter((row) => row.signal === "Green").length;
     return {
@@ -252,6 +269,92 @@ function App() {
 
     return navRoute.steps.find((step) => step.maneuver?.type !== "depart") || navRoute.steps[0];
   }, [navRoute]);
+
+  const trafficDensity = BASE_TRAFFIC.map((item) => {
+    const variance = ((emergencyVehicleIndex + item.id.charCodeAt(0)) % 5) - 2;
+    const vehicles = Math.max(item.vehicles + variance, 3);
+    const traffic = vehicles > 28 ? "High" : vehicles > 15 ? "Moderate" : "Low";
+    return { ...item, vehicles, traffic };
+  });
+
+  const revealDelay = (ms) => ({ "--reveal-delay": `${ms}ms` });
+  const detectedCameraCount = cameras.filter((camera) => camera.detected).length;
+  const greenSignalCount = signalRows.filter((row) => row.signal === "Green").length;
+  const nextSignalLabel = nearestNextSignal ? `Intersection ${nearestNextSignal}` : "Final corridor stretch";
+  const activeDetection = cameras.find((camera) => camera.detected) || null;
+  const upcomingSignal = signalRows.find((row) => row.etaSeconds > 0) || null;
+  const activeCameraNode = routeCameraNodes.find((camera) => camera.id === activeDetection?.id) || null;
+  const upcomingIntersection = route.intersections.find((intersection) => intersection.id === upcomingSignal?.intersection) || null;
+  const corridorProgress = Math.round((emergencyVehicleIndex / Math.max(route.points.length - 1, 1)) * 100);
+  const modelFeedLabel = webcamRunning
+    ? "Live webcam model output"
+    : webcamConnecting
+      ? "Connecting to live model"
+      : videoPredictionUrl
+        ? "Processed video evidence"
+        : "Model ready for demo input";
+  const modelFeedHint = webcamPredictedFrameUrl
+    ? "Current AI inference frame from the live detection pipeline."
+    : videoPredictionUrl
+      ? "Annotated output from uploaded video processed by the model."
+      : "Use Start Webcam AI or upload a clip below to show the actual detection model during the presentation.";
+
+  const demoPhase = useMemo(() => {
+    if (!isRunning && emergencyVehicleIndex >= route.points.length - 1) {
+      return 3;
+    }
+
+    if (upcomingSignal && upcomingSignal.signal === "Green") {
+      return 2;
+    }
+
+    if (activeDetection && upcomingSignal) {
+      return 1;
+    }
+
+    return 0;
+  }, [activeDetection, emergencyVehicleIndex, isRunning, route.points.length, upcomingSignal]);
+
+  const demoFlow = [
+    {
+      title: "Emergency Vehicle Detected",
+      detail: activeDetection
+        ? `${activeDetection.id} detected emergency class (${activeDetection.confidence}% confidence)`
+        : "Waiting for camera detection window",
+    },
+    {
+      title: "ETA Computed for Next Signal",
+      detail: upcomingSignal
+        ? `ETA to intersection ${upcomingSignal.intersection}: ${upcomingSignal.eta}`
+        : "No upcoming signal remaining on this route",
+    },
+    {
+      title: "Pre-Green Command Issued",
+      detail: upcomingSignal
+        ? `Intersection ${upcomingSignal.intersection} receives priority green command`
+        : "Priority command finished for all intersections",
+    },
+    {
+      title: "Corridor Cleared to Hospital",
+      detail: !isRunning
+        ? "Emergency vehicle reached destination with signal priority"
+        : `Live monitoring active, ETA ${emergencyVehicleEtaMinutes} min`,
+    },
+  ];
+
+  const activateScenario = (routeKey) => {
+    setSelectedRoute(routeKey);
+    setEmergencyVehicleIndex(0);
+    setSpeedKmh(52);
+    setIsRunning(true);
+    setPresentationFocus("corridor");
+    setLogs((prev) => [{ time: nowTime(), text: "Scenario replay started for judges" }, ...prev].slice(0, 10));
+    setAlerts(["Demo mode active: detection -> ETA -> signal pre-green", "Emergency monitoring active"]);
+  };
+
+  const replayScenario = () => {
+    activateScenario(selectedRoute);
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -307,6 +410,52 @@ function App() {
         .addTo(group);
     });
 
+    routeCameraNodes.forEach((camera) => {
+      const cameraColor = camera.detected ? "#f59e0b" : "#355c7d";
+      L.circleMarker(camera.coord, {
+        radius: camera.detected ? 8 : 6,
+        color: "#ffffff",
+        fillColor: cameraColor,
+        fillOpacity: 0.95,
+        weight: 2,
+      })
+        .bindTooltip(
+          `${camera.id}${camera.detected ? ` detecting emergency vehicle (${camera.confidence}%)` : ` monitoring signal ${camera.targetSignal}`}`,
+          { permanent: false }
+        )
+        .addTo(group);
+    });
+
+    if (activeCameraNode) {
+      L.circle(activeCameraNode.coord, {
+        radius: 140,
+        color: "#f59e0b",
+        fillColor: "#fbbf24",
+        fillOpacity: 0.12,
+        weight: 1.5,
+        dashArray: "6 6",
+      }).addTo(group);
+    }
+
+    if (activeCameraNode && upcomingIntersection) {
+      L.polyline([activeCameraNode.coord, upcomingIntersection.coord], {
+        color: "#f59e0b",
+        weight: 4,
+        opacity: 0.9,
+        dashArray: "8 10",
+      })
+        .bindTooltip(`ETA sent from ${activeCameraNode.id} to signal ${upcomingIntersection.id}`)
+        .addTo(group);
+    }
+
+    if (upcomingIntersection) {
+      L.polyline([currentCoord, upcomingIntersection.coord], {
+        color: "#22c55e",
+        weight: 5,
+        opacity: 0.8,
+      }).addTo(group);
+    }
+
     L.circleMarker(HOSPITAL.coord, {
       radius: 10,
       color: "#0f2238",
@@ -328,7 +477,37 @@ function App() {
       .addTo(group);
 
     mapRef.current.panTo(currentCoord, { animate: true, duration: 0.8 });
-  }, [currentCoord, route, signalRows]);
+  }, [activeCameraNode, currentCoord, route, routeCameraNodes, signalRows, upcomingIntersection]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    if (presentationFocus === "camera" && activeCameraNode) {
+      map.flyTo(activeCameraNode.coord, 16, { duration: 1 });
+      return;
+    }
+
+    if (presentationFocus === "signal" && upcomingIntersection) {
+      map.flyTo(upcomingIntersection.coord, 16, { duration: 1 });
+      return;
+    }
+
+    if (presentationFocus === "hospital") {
+      map.flyTo(HOSPITAL.coord, 16, { duration: 1 });
+      return;
+    }
+
+    if (presentationFocus === "corridor") {
+      map.flyToBounds(L.latLngBounds(route.points), {
+        padding: [40, 40],
+        maxZoom: 15,
+        duration: 1,
+      });
+    }
+  }, [activeCameraNode, presentationFocus, route.points, upcomingIntersection]);
 
   useEffect(() => {
     if (!isRunning) {
@@ -565,18 +744,6 @@ function App() {
 
     map.flyTo(focusSlice[0], 16, { duration: 1.1 });
   }, [navNavigating, navRoute]);
-
-  const trafficDensity = BASE_TRAFFIC.map((item) => {
-    const variance = ((emergencyVehicleIndex + item.id.charCodeAt(0)) % 5) - 2;
-    const vehicles = Math.max(item.vehicles + variance, 3);
-    const traffic = vehicles > 28 ? "High" : vehicles > 15 ? "Moderate" : "Low";
-    return { ...item, vehicles, traffic };
-  });
-
-  const revealDelay = (ms) => ({ "--reveal-delay": `${ms}ms` });
-  const detectedCameraCount = cameras.filter((camera) => camera.detected).length;
-  const greenSignalCount = signalRows.filter((row) => row.signal === "Green").length;
-  const nextSignalLabel = nearestNextSignal ? `Intersection ${nearestNextSignal}` : "Final corridor stretch";
 
   const requestCurrentLocation = () => {
     if (!("geolocation" in navigator)) {
@@ -845,6 +1012,13 @@ function App() {
 
       outputVideoUrlRef.current = predictedVideoUrl;
       setVideoPredictionUrl(predictedVideoUrl);
+
+      // Force media element to reload the new blob URL in all browsers.
+      const outputVideoEl = outputVideoElementRef.current;
+      if (outputVideoEl) {
+        outputVideoEl.load();
+      }
+
       setLogs((prev) => [{ time: nowTime(), text: "Uploaded video processed by AI backend" }, ...prev].slice(0, 10));
     } catch (error) {
       setVideoPredictError(error?.message || "Could not process uploaded video");
@@ -1038,6 +1212,127 @@ function App() {
               <p className="section-subtitle">Real-time emergency route tracking, signal adaptation, and live emergency vehicle status.</p>
             </div>
 
+            <section className="solution-demo reveal" data-reveal style={revealDelay(50)}>
+              <div className="solution-demo-head">
+                <h3>Interactive Mission Console</h3>
+                <span className="solution-demo-tag">AI model + live map choreography</span>
+              </div>
+              <p>
+                Use this during the pitch to walk judges through the actual workflow: the model detects an emergency vehicle at a camera,
+                the system estimates time to the next signal, and the map shows how the corridor is pre-cleared before arrival.
+              </p>
+
+              <div className="solution-layout">
+                <div className="solution-controls">
+                  <div className="solution-toolbar-block">
+                    <span className="solution-toolbar-label">Scenario</span>
+                    <div className="solution-route-switcher">
+                      {Object.entries(ROUTES).map(([routeKey, routeOption]) => (
+                        <button
+                          key={routeKey}
+                          type="button"
+                          className={`solution-switch-btn${selectedRoute === routeKey ? " active" : ""}`}
+                          onClick={() => activateScenario(routeKey)}
+                        >
+                          {routeOption.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="solution-toolbar-block">
+                    <span className="solution-toolbar-label">Map focus</span>
+                    <div className="solution-focus-toolbar">
+                      <button type="button" className={`solution-focus-btn${presentationFocus === "corridor" ? " active" : ""}`} onClick={() => setPresentationFocus("corridor")}>
+                        Corridor
+                      </button>
+                      <button type="button" className={`solution-focus-btn${presentationFocus === "camera" ? " active" : ""}`} onClick={() => setPresentationFocus("camera")}>
+                        Active Camera
+                      </button>
+                      <button type="button" className={`solution-focus-btn${presentationFocus === "signal" ? " active" : ""}`} onClick={() => setPresentationFocus("signal")}>
+                        Next Signal
+                      </button>
+                      <button type="button" className={`solution-focus-btn${presentationFocus === "hospital" ? " active" : ""}`} onClick={() => setPresentationFocus("hospital")}>
+                        Hospital
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="solution-metrics-grid">
+                    <article>
+                      <span>Corridor Progress</span>
+                      <strong>{corridorProgress}%</strong>
+                    </article>
+                    <article>
+                      <span>Active Camera</span>
+                      <strong>{activeCameraNode ? activeCameraNode.id : "Scanning"}</strong>
+                    </article>
+                    <article>
+                      <span>Priority Signal</span>
+                      <strong>{upcomingIntersection ? `Intersection ${upcomingIntersection.id}` : "Completed"}</strong>
+                    </article>
+                    <article>
+                      <span>Model Status</span>
+                      <strong>{modelFeedLabel}</strong>
+                    </article>
+                  </div>
+                </div>
+
+                <aside className="solution-evidence-card">
+                  <div className="solution-evidence-head">
+                    <h4>AI Evidence Feed</h4>
+                    <span>{modelFeedLabel}</span>
+                  </div>
+                  {webcamPredictedFrameUrl ? (
+                    <img src={webcamPredictedFrameUrl} alt="Live AI evidence frame" className="solution-feed-frame" />
+                  ) : videoPredictionUrl ? (
+                    <video className="solution-feed-frame" src={videoPredictionUrl} controls playsInline preload="metadata" />
+                  ) : (
+                    <div className="solution-feed-placeholder">
+                      <strong>No live model frame pinned yet</strong>
+                      <span>{modelFeedHint}</span>
+                    </div>
+                  )}
+                  <p>{modelFeedHint}</p>
+                </aside>
+              </div>
+
+              <div className="solution-flow-grid" role="list" aria-label="Emergency corridor decision flow">
+                {demoFlow.map((step, index) => {
+                  let state = "waiting";
+                  if (demoPhase > index) {
+                    state = "done";
+                  } else if (demoPhase === index) {
+                    state = "current";
+                  }
+
+                  return (
+                    <article key={step.title} className={`solution-step ${state}`} role="listitem">
+                      <span className="solution-step-index">{index + 1}</span>
+                      <h4>{step.title}</h4>
+                      <p>{step.detail}</p>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="solution-command-strip" aria-live="polite">
+                <strong>Live command stream:</strong>
+                <span>
+                  {upcomingSignal
+                    ? `${activeCameraNode ? `${activeCameraNode.id} DETECTED -> ` : "DETECTED -> "}ETA ${upcomingSignal.eta} -> NOTIFY SIGNAL ${upcomingSignal.intersection} -> SWITCH GREEN`
+                    : "CORRIDOR COMPLETE -> VEHICLE REACHED DESTINATION"}
+                </span>
+              </div>
+
+              <div className="solution-actions-row">
+                <button type="button" className="action-btn" onClick={replayScenario}>Replay Scenario</button>
+                <button type="button" className="action-btn secondary" onClick={() => setIsRunning((prev) => !prev)}>
+                  {isRunning ? "Pause Simulation" : "Resume Simulation"}
+                </button>
+              </div>
+            </section>
+
             <div className="dashboard primary-grid">
               <section className="panel map-panel reveal" data-reveal style={revealDelay(60)}>
                 <div className="panel-head">
@@ -1203,7 +1498,7 @@ function App() {
                       <div className="preview-pane">
                         <small className="preview-label">AI Annotated Output</small>
                         {videoPredictionUrl ? (
-                          <video className="video-preview" src={videoPredictionUrl} controls />
+                          <video ref={outputVideoElementRef} className="video-preview" src={videoPredictionUrl} controls playsInline preload="metadata" />
                         ) : (
                           <div className="camera-feed placeholder-feed">Predicted output video will appear here</div>
                         )}
@@ -1225,27 +1520,6 @@ function App() {
                 </ul>
               </section>
 
-              <section className="panel density-panel reveal" data-reveal style={revealDelay(360)}>
-                <h2>Traffic Density Monitoring</h2>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Intersection</th>
-                      <th>Vehicles</th>
-                      <th>Traffic</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trafficDensity.map((item) => (
-                      <tr key={item.id}>
-                        <td>{item.id}</td>
-                        <td>{item.vehicles}</td>
-                        <td>{item.traffic}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
             </div>
           </div>
         </section>
