@@ -18,6 +18,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from Video_layer import DEFAULT_WEIGHTS_PATH, VideoPredictor
 
@@ -121,7 +122,12 @@ async def ws_live_prediction(websocket: WebSocket) -> None:
                 await websocket.send_text("decode_error")
                 continue
 
-            annotated = predictor.annotate_frame(frame)
+            try:
+                annotated = await run_in_threadpool(predictor.annotate_frame, frame)
+            except Exception:
+                await websocket.send_text("inference_error")
+                continue
+
             ok, encoded = cv2.imencode(".jpg", annotated)
             if not ok:
                 await websocket.send_text("encode_error")
@@ -129,6 +135,8 @@ async def ws_live_prediction(websocket: WebSocket) -> None:
 
             await websocket.send_bytes(encoded.tobytes())
     except WebSocketDisconnect:
+        return
+    except Exception:
         return
 
 
@@ -189,11 +197,17 @@ async def predict_video_file(
     if predictor is None:
         raise HTTPException(status_code=503, detail="Model is not loaded")
 
+    if file.content_type and not file.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="Uploaded file is not a video")
+
     in_suffix = Path(file.filename or "input.mp4").suffix or ".mp4"
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=in_suffix) as input_temp:
         input_path = Path(input_temp.name)
-        input_temp.write(await file.read())
+        payload = await file.read()
+        if not payload:
+            raise HTTPException(status_code=400, detail="Uploaded video is empty")
+        input_temp.write(payload)
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as output_temp:
         output_path = Path(output_temp.name)
@@ -201,9 +215,16 @@ async def predict_video_file(
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as output_web_temp:
         output_web_path = Path(output_web_temp.name)
 
-    predictor.process_video(input_path, output_path)
+    try:
+        # Offload CPU-bound video processing so the API loop stays responsive.
+        await run_in_threadpool(predictor.process_video, input_path, output_path)
+    except Exception as exc:
+        _safe_unlink(input_path)
+        _safe_unlink(output_path)
+        _safe_unlink(output_web_path)
+        raise HTTPException(status_code=400, detail=f"Video processing failed: {exc}") from exc
 
-    web_ready = _transcode_to_web_mp4(output_path, output_web_path)
+    web_ready = await run_in_threadpool(_transcode_to_web_mp4, output_path, output_web_path)
     serving_path = output_web_path if web_ready else output_path
 
     _safe_unlink(input_path)

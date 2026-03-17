@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=League+Script&family=Limelight&family=Pacifico&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&family=League+Script&family=Limelight&family=Pacifico&display=swap");
 
 :root {
   --bg: #eef4fb;
@@ -95,7 +95,7 @@ button {
 }
 
 .brand-main {
-  font-family: "Limelight", cursive;
+  font-family: "Archivo Black", sans-serif;
   font-size: clamp(3.2rem, 7.5vw, 5.8rem);
   font-weight: 400;
   color: var(--primary);
@@ -103,7 +103,7 @@ button {
 }
 
 .brand-sub {
-  font-family: "Limelight", cursive;
+  font-family: "Archivo Black", sans-serif;
   font-size: clamp(1.1rem, 2.4vw, 1.75rem);
   font-weight: 400;
   color: var(--muted);
@@ -147,6 +147,230 @@ button {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   box-shadow: var(--shadow);
+}
+
+.section-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  text-decoration: none;
+  padding: 0;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  flex-shrink: 0;
+  perspective: 800px;
+  transition: transform 0.28s ease;
+}
+
+.nav-brand:hover {
+  transform: none;
+}
+
+.nav-brand-logo-shell {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: flat;
+  animation: none;
+}
+
+.nav-rotor-ring {
+  display: none;
+}
+
+.nav-brand-logo-shell::before {
+  content: none;
+}
+
+.nav-brand-glow {
+  display: none;
+}
+
+.nav-brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 0;
+  border: none;
+  transform: none;
+  box-shadow: none;
+  mix-blend-mode: normal;
+  filter: contrast(1.12) saturate(1.08);
+}
+
+.nav-siren-3d {
+  position: absolute;
+  right: -7px;
+  top: -8px;
+  width: 17px;
+  height: 17px;
+  transform-style: preserve-3d;
+  transform: rotateX(52deg) rotateZ(-12deg) translateZ(16px);
+  animation: none;
+  pointer-events: none;
+}
+
+.nav-siren-base {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 1px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #5c6880 0%, #2a3448 100%);
+  box-shadow: 0 2px 4px rgba(4, 16, 33, 0.45);
+}
+
+.nav-siren-cap {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 4px;
+  height: 9px;
+  border-radius: 999px 999px 4px 4px;
+  background: linear-gradient(180deg, rgba(230, 241, 255, 0.9), rgba(167, 194, 235, 0.4));
+  border: 1px solid rgba(204, 228, 255, 0.85);
+  box-shadow: inset 0 0 6px rgba(221, 238, 255, 0.75);
+}
+
+.nav-siren-light {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  top: 2px;
+  filter: blur(0.1px);
+}
+
+.nav-siren-light-red {
+  left: 3px;
+  background: #ff5555;
+  box-shadow: 0 0 7px rgba(255, 72, 72, 0.95);
+  animation: none;
+}
+
+.nav-siren-light-blue {
+  right: 3px;
+  background: #4fb9ff;
+  box-shadow: 0 0 7px rgba(79, 185, 255, 0.95);
+  animation: none;
+}
+
+.nav-brand-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: linear-gradient(120deg, transparent 10%, rgba(255, 255, 255, 0.55) 45%, transparent 75%);
+  transform: translateX(-115%) translateZ(10px);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+  animation: none;
+  pointer-events: none;
+}
+
+@keyframes navLogoFloat {
+  0%,
+  100% {
+    transform: translateY(0) rotateX(0deg) rotateY(0deg) rotateZ(0deg);
+  }
+  35% {
+    transform: translateY(-3px) rotateX(5deg) rotateY(-6deg) rotateZ(-1deg);
+  }
+  70% {
+    transform: translateY(1px) rotateX(-3deg) rotateY(5deg) rotateZ(1deg);
+  }
+}
+
+@keyframes navLogoRingPulse {
+  0%,
+  100% {
+    opacity: 0.38;
+    transform: translateZ(-6px) scale(0.98);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateZ(-6px) scale(1.08);
+  }
+}
+
+@keyframes navLogoGlow {
+  0%,
+  100% {
+    opacity: 0.58;
+    transform: translateZ(-14px) scale(1.04);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translateZ(-14px) scale(1.12);
+  }
+}
+
+@keyframes navLogoShine {
+  0%,
+  38% {
+    transform: translateX(-115%) translateZ(10px);
+    opacity: 0;
+  }
+  52% {
+    opacity: 0.85;
+  }
+  68%,
+  100% {
+    transform: translateX(115%) translateZ(10px);
+    opacity: 0;
+  }
+}
+
+@keyframes navRingSpin {
+  from {
+    transform: translateZ(-8px) rotate(0deg);
+  }
+  to {
+    transform: translateZ(-8px) rotate(360deg);
+  }
+}
+
+@keyframes navSirenBob {
+  0%,
+  100% {
+    transform: rotateX(52deg) rotateZ(-12deg) translateZ(16px) translateY(0);
+  }
+  50% {
+    transform: rotateX(52deg) rotateZ(-12deg) translateZ(16px) translateY(-1px);
+  }
+}
+
+@keyframes navSirenFlashRed {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes navSirenFlashBlue {
+  0%,
+  49% {
+    opacity: 0.25;
+  }
+  50%,
+  100% {
+    opacity: 1;
+  }
 }
 
 .section-nav-links {
@@ -376,30 +600,41 @@ h1 {
   top: 16px;
 }
 
-.gc-title-main,
-.gc-title-sub {
-  margin: 0;
-  line-height: 0.95;
-  font-size: clamp(1.6rem, 2.9vw, 2.4rem);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+.gc-title-block {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+  margin-bottom: 8px;
 }
 
 .gc-title-main {
-  color: #1dde75;
-  text-shadow: 0 0 22px rgba(29, 222, 117, 0.8), 0 0 60px rgba(29, 222, 117, 0.3);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(1.9rem, 3.6vw, 2.9rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #22c55e;
+  text-shadow: 0 0 12px rgba(34, 197, 94, 0.65), 0 0 28px rgba(34, 197, 94, 0.35);
+  line-height: 1;
 }
 
 .gc-title-sub {
-  color: #e8f3ff;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+  font-family: "Archivo Black", sans-serif;
+  font-size: clamp(1.9rem, 3.6vw, 2.9rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  line-height: 1;
+  margin-top: 2px;
 }
 
 .gc-title-caption {
-  margin: 0.5rem 0 0.55rem;
-  font-size: 0.67rem;
-  letter-spacing: 0.2em;
-  color: rgba(200, 225, 255, 0.6);
+  font-size: clamp(0.48rem, 0.9vw, 0.62rem);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: rgba(148, 163, 184, 0.9);
+  margin-top: 7px;
+  text-transform: uppercase;
 }
 
 .gc-live-pill {
@@ -929,10 +1164,6 @@ h1 {
 :root[data-theme="dark"] .green-corridor-3d {
   border-color: rgba(103, 164, 230, 0.45);
   background: #030810;
-}
-
-:root[data-theme="dark"] .gc-title-sub {
-  color: #f5f9ff;
 }
 
 .scene3d {
@@ -1946,6 +2177,16 @@ tr:last-child td {
   50%       { box-shadow: 0 0 10px #10b981, 0 0 18px rgba(16,185,129,0.4); opacity: 1; }
 }
 
+@keyframes gcBrandFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
 @keyframes starsTwinkle {
   0%, 100% { opacity: 0.65; }
   50%       { opacity: 1; }
@@ -2032,6 +2273,29 @@ tr:last-child td {
     justify-content: flex-start;
   }
 
+  .section-nav-left {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+
+  .nav-brand {
+    align-self: flex-start;
+  }
+
+  .nav-brand-logo-shell {
+    width: 36px;
+    height: 36px;
+  }
+
+  .nav-siren-3d {
+    right: -6px;
+    top: -7px;
+    width: 14px;
+    height: 14px;
+  }
+
   .section-nav-links {
     width: 100%;
     gap: 0.4rem;
@@ -2058,15 +2322,6 @@ tr:last-child td {
 
   .green-corridor-3d {
     min-height: 205px;
-  }
-
-  .gc-title-main,
-  .gc-title-sub {
-    font-size: 1.8rem;
-  }
-
-  .gc-title-caption {
-    letter-spacing: 0.12em;
   }
 
   .gc-road-platform {
@@ -2636,7 +2891,15 @@ tr:last-child td {
   .gc-road-lane,
   .panel,
   .theme-toggle,
-  .hero-visual-card {
+  .hero-visual-card,
+  .nav-brand-logo-shell,
+  .nav-brand-logo-shell::before,
+  .nav-rotor-ring,
+  .nav-siren-3d,
+  .nav-siren-light-red,
+  .nav-siren-light-blue,
+  .nav-brand-glow,
+  .nav-brand-shine {
     transition: none;
     transform: none;
     animation: none;

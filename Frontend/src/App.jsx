@@ -159,10 +159,13 @@ function App() {
   const webcamSocketRef = useRef(null);
   const webcamStreamRef = useRef(null);
   const webcamFrameTimerRef = useRef(null);
+  const webcamReconnectTimerRef = useRef(null);
+  const webcamReconnectAttemptsRef = useRef(0);
   const webcamFrameUrlRef = useRef(null);
   const uploadPreviewUrlRef = useRef(null);
   const outputVideoUrlRef = useRef(null);
-    const webcamIntentionalStopRef = useRef(false);
+  const webcamIntentionalStopRef = useRef(false);
+  const MAX_WEBCAM_RECONNECT_ATTEMPTS = 6;
   const [theme, setTheme] = useState(() => {
     const savedTheme = window.localStorage.getItem("traffic-dashboard-theme");
     return savedTheme === "dark" ? "dark" : "light";
@@ -607,12 +610,61 @@ function App() {
     );
   };
 
-  const stopWebcamInference = () => {
-    webcamIntentionalStopRef.current = true;
+  const clearWebcamFrameTimer = () => {
     if (webcamFrameTimerRef.current) {
       window.clearInterval(webcamFrameTimerRef.current);
       webcamFrameTimerRef.current = null;
     }
+  };
+
+  const clearWebcamReconnectTimer = () => {
+    if (webcamReconnectTimerRef.current) {
+      window.clearTimeout(webcamReconnectTimerRef.current);
+      webcamReconnectTimerRef.current = null;
+    }
+  };
+
+  const startFramePushLoop = () => {
+    clearWebcamFrameTimer();
+    webcamFrameTimerRef.current = window.setInterval(() => {
+      const canvasElement = webcamCanvasRef.current;
+      const video = webcamVideoRef.current;
+      const ws = webcamSocketRef.current;
+
+      if (!canvasElement || !video || !ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      if (!video.videoWidth || !video.videoHeight) {
+        return;
+      }
+
+      canvasElement.width = video.videoWidth;
+      canvasElement.height = video.videoHeight;
+      const context = canvasElement.getContext("2d");
+      if (!context) {
+        return;
+      }
+
+      context.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+      canvasElement.toBlob(
+        (blob) => {
+          if (!blob || ws.readyState !== WebSocket.OPEN) {
+            return;
+          }
+          ws.send(blob);
+        },
+        "image/jpeg",
+        0.82
+      );
+    }, 220);
+  };
+
+  const stopWebcamInference = (intentionalStop = true) => {
+    webcamIntentionalStopRef.current = intentionalStop;
+    clearWebcamReconnectTimer();
+    clearWebcamFrameTimer();
+    webcamReconnectAttemptsRef.current = 0;
 
     if (webcamSocketRef.current) {
       webcamSocketRef.current.close();
@@ -632,11 +684,86 @@ function App() {
     setWebcamRunning(false);
   };
 
+  const connectWebcamSocket = () => {
+    const wsBase = BACKEND_BASE_URL.replace("http://", "ws://").replace("https://", "wss://");
+    const socket = new WebSocket(`${wsBase}/ws/live`);
+    socket.binaryType = "arraybuffer";
+    webcamSocketRef.current = socket;
+
+    socket.onopen = () => {
+      clearWebcamReconnectTimer();
+      webcamReconnectAttemptsRef.current = 0;
+      setWebcamConnecting(false);
+      setWebcamRunning(true);
+      setWebcamError("");
+      startFramePushLoop();
+      setLogs((prev) => [{ time: nowTime(), text: "Live webcam AI detection started" }, ...prev].slice(0, 10));
+    };
+
+    socket.onmessage = (event) => {
+      if (typeof event.data === "string") {
+        return;
+      }
+
+      const imageBlob = new Blob([event.data], { type: "image/jpeg" });
+      const frameUrl = URL.createObjectURL(imageBlob);
+
+      if (webcamFrameUrlRef.current) {
+        URL.revokeObjectURL(webcamFrameUrlRef.current);
+      }
+
+      webcamFrameUrlRef.current = frameUrl;
+      setWebcamPredictedFrameUrl(frameUrl);
+    };
+
+    socket.onerror = () => {
+      if (!webcamIntentionalStopRef.current) {
+        setWebcamError("Connection issue detected. Reconnecting...");
+      }
+    };
+
+    socket.onclose = () => {
+      webcamSocketRef.current = null;
+      clearWebcamFrameTimer();
+
+      const shouldReconnect = !webcamIntentionalStopRef.current && !!webcamStreamRef.current;
+      if (!shouldReconnect) {
+        setWebcamConnecting(false);
+        setWebcamRunning(false);
+        return;
+      }
+
+      const nextAttempt = webcamReconnectAttemptsRef.current + 1;
+      webcamReconnectAttemptsRef.current = nextAttempt;
+
+      if (nextAttempt > MAX_WEBCAM_RECONNECT_ATTEMPTS) {
+        stopWebcamInference(false);
+        setWebcamError("Connection to AI backend is unstable. Please click Start Webcam AI to retry.");
+        return;
+      }
+
+      const delayMs = Math.min(6000, 600 * 2 ** (nextAttempt - 1));
+      setWebcamRunning(false);
+      setWebcamConnecting(true);
+      setWebcamError(`Connection dropped. Reconnecting (${nextAttempt}/${MAX_WEBCAM_RECONNECT_ATTEMPTS})...`);
+
+      clearWebcamReconnectTimer();
+      webcamReconnectTimerRef.current = window.setTimeout(() => {
+        if (!webcamIntentionalStopRef.current && webcamStreamRef.current) {
+          connectWebcamSocket();
+        }
+      }, delayMs);
+    };
+  };
+
   const startWebcamInference = async () => {
     if (webcamRunning || webcamConnecting) {
       return;
     }
 
+    webcamIntentionalStopRef.current = false;
+    webcamReconnectAttemptsRef.current = 0;
+    clearWebcamReconnectTimer();
     setWebcamError("");
     setWebcamConnecting(true);
 
@@ -654,83 +781,12 @@ function App() {
 
       videoElement.srcObject = stream;
       await videoElement.play();
-
-      const wsBase = BACKEND_BASE_URL.replace("http://", "ws://").replace("https://", "wss://");
-      const socket = new WebSocket(`${wsBase}/ws/live`);
-      socket.binaryType = "arraybuffer";
-      webcamSocketRef.current = socket;
-
-      socket.onopen = () => {
-        setWebcamConnecting(false);
-        setWebcamRunning(true);
-        setLogs((prev) => [{ time: nowTime(), text: "Live webcam AI detection started" }, ...prev].slice(0, 10));
-
-        webcamFrameTimerRef.current = window.setInterval(() => {
-          const canvasElement = webcamCanvasRef.current;
-          const video = webcamVideoRef.current;
-          const ws = webcamSocketRef.current;
-
-          if (!canvasElement || !video || !ws || ws.readyState !== WebSocket.OPEN) {
-            return;
-          }
-
-          if (!video.videoWidth || !video.videoHeight) {
-            return;
-          }
-
-          canvasElement.width = video.videoWidth;
-          canvasElement.height = video.videoHeight;
-          const context = canvasElement.getContext("2d");
-          if (!context) {
-            return;
-          }
-
-          context.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
-          canvasElement.toBlob(
-            (blob) => {
-              if (!blob || ws.readyState !== WebSocket.OPEN) {
-                return;
-              }
-              ws.send(blob);
-            },
-            "image/jpeg",
-            0.82
-          );
-        }, 220);
-      };
-
-      socket.onmessage = (event) => {
-        if (typeof event.data === "string") {
-          return;
-        }
-
-        const imageBlob = new Blob([event.data], { type: "image/jpeg" });
-        const frameUrl = URL.createObjectURL(imageBlob);
-
-        if (webcamFrameUrlRef.current) {
-          URL.revokeObjectURL(webcamFrameUrlRef.current);
-        }
-
-        webcamFrameUrlRef.current = frameUrl;
-        setWebcamPredictedFrameUrl(frameUrl);
-      };
-
-      socket.onerror = () => {
-        setWebcamError("Connection error — make sure the AI backend is running");
-      };
-
-      socket.onclose = () => {
-        if (!webcamIntentionalStopRef.current) {
-          setWebcamError("Connection to AI backend dropped unexpectedly. Please try again.");
-        }
-        stopWebcamInference();
-      };
+      connectWebcamSocket();
     } catch (error) {
       stopWebcamInference();
       setWebcamError(error?.message || "Unable to start webcam AI detection");
     }
   };
-          webcamIntentionalStopRef.current = false;
 
   const onVideoFileSelect = (event) => {
     const file = event.target.files?.[0] || null;
@@ -773,7 +829,7 @@ function App() {
         let detail = "Video prediction failed";
         try {
           const errorBody = await response.json();
-          detail = errorBody?.message || errorBody?.details || detail;
+          detail = errorBody?.details || errorBody?.message || detail;
         } catch {
           // Ignore parse errors and keep generic detail message.
         }
@@ -819,10 +875,23 @@ function App() {
     <>
       <div className="ambient-bg" aria-hidden="true" />
       <nav className="container section-nav" aria-label="Section Navigation">
-        <div className="section-nav-links">
-          <a href="#maps-section">Maps</a>
-          <a href="#detection-intelligence-section">Detection and Decision Intelligence</a>
-          <a href="#impact-analytics-section">System Impact Analytics</a>
+        <div className="section-nav-left">
+          <a href="#" className="nav-brand" aria-label="Green Corridor home">
+            <span className="nav-brand-logo-shell" aria-hidden="true">
+              <img
+                src="/WhatsApp_Image_2026-03-17_at_2.06.25_PM-removebg-preview.png"
+                alt="Siren logo"
+                className="nav-brand-logo"
+                loading="eager"
+              />
+            </span>
+          </a>
+
+          <div className="section-nav-links">
+            <a href="#maps-section">Maps</a>
+            <a href="#detection-intelligence-section">Detection and Decision Intelligence</a>
+            <a href="#impact-analytics-section">System Impact Analytics</a>
+          </div>
         </div>
         <button
           type="button"
@@ -857,9 +926,11 @@ function App() {
 
             {/* Branding */}
             <div className="gc-title-wrap">
-              <h3 className="gc-title-main">GREEN</h3>
-              <h3 className="gc-title-sub">CORRIDOR</h3>
-              <p className="gc-title-caption">SMART TRAFFIC | EMERGENCY RESPONSE</p>
+              <div className="gc-title-block">
+                <span className="gc-title-main">GREEN</span>
+                <span className="gc-title-sub">CORRIDOR</span>
+                <span className="gc-title-caption">SMART TRAFFIC | EMERGENCY RESPONSE</span>
+              </div>
               <div className="gc-live-pill">
                 <span className="gc-live-dot" />
                 <span className="gc-live-label">LIVE</span>

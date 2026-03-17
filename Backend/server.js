@@ -26,6 +26,70 @@ const upload = multer({
   },
 });
 
+async function streamToText(stream) {
+  return new Promise((resolve) => {
+    const chunks = [];
+
+    stream.on("data", (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      // Avoid unbounded memory growth on huge error payloads.
+      if (chunks.reduce((sum, item) => sum + item.length, 0) > 64 * 1024) {
+        stream.destroy();
+      }
+    });
+
+    stream.on("error", () => resolve(""));
+    stream.on("close", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  });
+}
+
+function parseErrorText(rawText) {
+  if (!rawText) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(rawText);
+    return parsed?.detail || parsed?.message || rawText;
+  } catch {
+    return rawText;
+  }
+}
+
+async function getAxiosErrorDetails(error, fallbackMessage) {
+  if (error?.code === "ECONNREFUSED") {
+    return "Model server is offline. Start FastAPI with: cd Model && source ../.venv/bin/activate && uvicorn fastapi_server:app --host 0.0.0.0 --port 8000";
+  }
+
+  const responseData = error?.response?.data;
+  if (!responseData) {
+    return String(error?.message || fallbackMessage);
+  }
+
+  if (Buffer.isBuffer(responseData)) {
+    const parsed = parseErrorText(responseData.toString("utf8"));
+    return parsed || fallbackMessage;
+  }
+
+  if (typeof responseData === "string") {
+    const parsed = parseErrorText(responseData);
+    return parsed || fallbackMessage;
+  }
+
+  if (typeof responseData?.pipe === "function") {
+    const text = await streamToText(responseData);
+    const parsed = parseErrorText(text);
+    return parsed || String(error?.message || fallbackMessage);
+  }
+
+  if (typeof responseData === "object") {
+    return responseData?.detail || responseData?.message || String(error?.message || fallbackMessage);
+  }
+
+  return String(error?.message || fallbackMessage);
+}
+
 app.get("/health", async (_req, res) => {
   try {
     const response = await axios.get(`${FASTAPI_BASE_URL}/health`, { timeout: 5000 });
@@ -80,6 +144,14 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
     return;
   }
 
+  if (req.file.mimetype && !req.file.mimetype.startsWith("video/")) {
+    res.status(400).json({
+      message: "Invalid upload",
+      details: `Expected a video file but received ${req.file.mimetype}`,
+    });
+    return;
+  }
+
   try {
     const form = new FormData();
     form.append("file", req.file.buffer, {
@@ -90,7 +162,7 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
     const response = await axios.post(`${FASTAPI_BASE_URL}/predict/video/file`, form, {
       headers: form.getHeaders(),
       responseType: "stream",
-      timeout: 0,
+      timeout: 15 * 60 * 1000,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
     });
@@ -105,9 +177,10 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
     res.setHeader("Content-Type", response.headers["content-type"] || "video/mp4");
     response.data.pipe(res);
   } catch (error) {
+    const details = await getAxiosErrorDetails(error, "Video file inference failed");
     res.status(502).json({
       message: "Video file inference failed",
-      details: error?.response?.data?.detail || String(error?.message || error),
+      details,
     });
   }
 });
