@@ -87,6 +87,9 @@ Frontend (React Map UI)
 
 ---
 
+
+---
+
 ## 🛠️ Tech Stack
 
 ### 🔹 Frontend
@@ -123,37 +126,55 @@ Frontend (React Map UI)
 ```bash
 git clone https://github.com/ketanjain113/GreenCorridor.git
 cd GreenCorridor
-2️⃣ Install Dependencies
+```
+
+### 2️⃣ Install Dependencies
+
 Backend
+```bash
 cd backend
 npm install
+```
+
 Frontend
+```bash
 cd frontend
 npm install
+```
+
 ML (Python)
+```bash
 pip install ultralytics opencv-python numpy
-▶️ Running the Project
+```
+
+###▶️ Running the Project
+
 Start Backend
+```bash
 cd backend
 npm start
+```
+
 Start Frontend
+```bash
 cd frontend
 npm run dev
+```
+
 Run ML Detection
+```bash
 python detect.py
-📊 Demo Flow
+```
 
-Upload video
+###📊 Demo Flow
 
-Emergency vehicle detected
+1. Upload video
+2. Emergency vehicle detected
+3. ETA displayed
+4. Signal turns GREEN
+5. Alert appears
 
-ETA displayed
-
-Signal turns GREEN
-
-Alert appears
-
-🏆 Key Innovation
+###🏆 Key Innovation
 
 Predictive Traffic Control using ETA instead of reactive systems
 
@@ -165,7 +186,7 @@ Uses AI-based prediction
 
 Works in real-time
 
-📈 Future Enhancements
+###📈 Future Enhancements
 
 Multi-vehicle priority system
 
@@ -175,18 +196,12 @@ IoT-based signal automation
 
 GPS-based tracking
 
-👨‍💻 Contributors
+###👨‍💻 Contributors
 
-Ketan Jain
+[Ketan Jain]('github.com/ketanjain113)
 
-Kavish Jain
+[Kavish Jain]('github.com/kavish200)
 
-Sarthak Mahajan
+[Sarthak Mahajan]('github.com/sarthakm811)
 
-Prayagi Sahajwani
-
-Team Green Corridor
-
-📜 License
-
-This project is for educational and hackathon purposes.
+[Prayagi Sahajwani]('github.com/prayagi)
