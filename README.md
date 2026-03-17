@@ -60,6 +60,7 @@ Detect → Track → Predict → Act → Alert
 - Shows route and intersections  
 
 ### ⚠️ Lane Clearance Alerts
+
 Displays warning:
 
 > ⚠ Emergency vehicle approaching — clear lane  
@@ -122,38 +123,24 @@ Frontend (React Map UI)
 ```bash
 git clone https://github.com/ketanjain113/GreenCorridor.git
 cd GreenCorridor
-```
 2️⃣ Install Dependencies
 Backend
-```bash
 cd backend
 npm install
-```
 Frontend
-
-```bash
 cd frontend
 npm install
-```
 ML (Python)
-```bash
 pip install ultralytics opencv-python numpy
-```
 ▶️ Running the Project
 Start Backend
-```bash
 cd backend
 npm start
-```
 Start Frontend
-```bash
 cd frontend
 npm run dev
-```
 Run ML Detection
-```bash
 python detect.py
-```
 📊 Demo Flow
 
 Upload video
@@ -190,10 +177,13 @@ GPS-based tracking
 
 👨‍💻 Contributors
 
-[Ketan Jain]('github.com/ketanjain113')
-[Kavish Jain]('github.com/kavish200')
-[Sarthak Mahajan]('github.com/sarthakm811')
-[Prayagi Sahajwani]('github.com/prayagi')
+Ketan Jain
+
+Kavish Jain
+
+Sarthak Mahajan
+
+Prayagi Sahajwani
 
 Team Green Corridor
 
