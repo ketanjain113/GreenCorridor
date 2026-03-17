@@ -69,6 +69,22 @@ function formatDuration(durationSeconds) {
   return `${minutes} min`;
 }
 
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function getStepInstruction(step) {
   if (!step) {
     return "Follow the highlighted route";
@@ -1078,27 +1094,43 @@ function App() {
                   </article>
 
                   <article className="camera-card upload-card">
-                    <h3>Upload Video for Judges</h3>
-                    <p>Upload a recorded video and generate an AI-annotated result video.</p>
-                    <div className="camera-actions">
-                      <input type="file" accept="video/*" onChange={onVideoFileSelect} />
+                    <div className="upload-card-head">
+                      <div>
+                        <h3>Upload Video for Judges</h3>
+                        <p>Submit recorded evidence and generate an AI-annotated review clip.</p>
+                      </div>
+                      <span className="upload-status-badge">Evidence Review</span>
+                    </div>
+
+                    <div className="upload-dropzone">
+                      <label htmlFor="judge-video-upload" className="upload-file-label">
+                        <span className="upload-file-title">Select Video</span>
+                        <span className="upload-file-subtitle">MP4, MOV, AVI, MKV supported</span>
+                      </label>
+                      <input id="judge-video-upload" type="file" accept="video/*" onChange={onVideoFileSelect} className="upload-file-input" />
+                      <p className="upload-file-meta">
+                        {videoUploadFile ? `${videoUploadFile.name} • ${formatFileSize(videoUploadFile.size)}` : "No file selected yet"}
+                      </p>
+                    </div>
+
+                    <div className="camera-actions upload-actions">
                       <button type="button" className="action-btn" onClick={runVideoPrediction} disabled={!videoUploadFile || videoPredicting}>
-                        {videoPredicting ? "Processing..." : "Run AI on Video"}
+                        {videoPredicting ? "Processing Video..." : "Run AI Analysis"}
                       </button>
                     </div>
                     {videoPredictError ? <p className="camera-error">{videoPredictError}</p> : null}
 
                     <div className="upload-preview-grid">
-                      <div>
-                        <small className="preview-label">Uploaded Video</small>
+                      <div className="preview-pane">
+                        <small className="preview-label">Original Upload</small>
                         {videoUploadPreviewUrl ? (
                           <video className="video-preview" src={videoUploadPreviewUrl} controls />
                         ) : (
                           <div className="camera-feed placeholder-feed">Select a video file to preview</div>
                         )}
                       </div>
-                      <div>
-                        <small className="preview-label">Predicted Output</small>
+                      <div className="preview-pane">
+                        <small className="preview-label">AI Annotated Output</small>
                         {videoPredictionUrl ? (
                           <video className="video-preview" src={videoPredictionUrl} controls />
                         ) : (
