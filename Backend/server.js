@@ -177,6 +177,11 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
     });
 
     const disposition = response.headers["content-disposition"];
+    const trafficAlert = response.headers["x-traffic-alert"];
+    const vehicleCountMax = response.headers["x-vehicle-count-max"];
+    const vehicleCountAvg = response.headers["x-vehicle-count-avg"];
+    const alertThreshold = response.headers["x-alert-threshold"];
+
     console.log("[video/file] FastAPI responded, piping video back to frontend");
     if (disposition) {
       res.setHeader("Content-Disposition", disposition);
@@ -185,6 +190,20 @@ app.post("/api/predict/video/file", upload.single("video"), async (req, res) => 
     }
 
     res.setHeader("Content-Type", response.headers["content-type"] || "video/mp4");
+
+    if (trafficAlert !== undefined) {
+      res.setHeader("X-Traffic-Alert", String(trafficAlert));
+    }
+    if (vehicleCountMax !== undefined) {
+      res.setHeader("X-Vehicle-Count-Max", String(vehicleCountMax));
+    }
+    if (vehicleCountAvg !== undefined) {
+      res.setHeader("X-Vehicle-Count-Avg", String(vehicleCountAvg));
+    }
+    if (alertThreshold !== undefined) {
+      res.setHeader("X-Alert-Threshold", String(alertThreshold));
+    }
+
     response.data.pipe(res);
   } catch (error) {
     console.error("[video/file] failed:", error?.message || error);

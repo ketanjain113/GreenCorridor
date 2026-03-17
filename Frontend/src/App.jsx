@@ -169,6 +169,7 @@ function App() {
   const uploadPreviewUrlRef = useRef(null);
   const outputVideoUrlRef = useRef(null);
   const outputVideoElementRef = useRef(null);
+  const policePopupTimerRef = useRef(null);
   const webcamIntentionalStopRef = useRef(false);
   const MAX_WEBCAM_RECONNECT_ATTEMPTS = 6;
   const [theme, setTheme] = useState(() => {
@@ -202,6 +203,7 @@ function App() {
   const [videoPredictionUrl, setVideoPredictionUrl] = useState("");
   const [videoPredicting, setVideoPredicting] = useState(false);
   const [videoPredictError, setVideoPredictError] = useState("");
+  const [policePopup, setPolicePopup] = useState({ visible: false, message: "" });
   const [presentationFocus, setPresentationFocus] = useState("corridor");
 
   const route = ROUTES[selectedRoute];
@@ -975,6 +977,18 @@ function App() {
     setVideoUploadPreviewUrl(previewUrl);
   };
 
+  const showPolicePopup = (message) => {
+    setPolicePopup({ visible: true, message });
+
+    if (policePopupTimerRef.current) {
+      window.clearTimeout(policePopupTimerRef.current);
+    }
+
+    policePopupTimerRef.current = window.setTimeout(() => {
+      setPolicePopup((prev) => ({ ...prev, visible: false }));
+    }, 5000);
+  };
+
   const runVideoPrediction = async () => {
     if (!videoUploadFile || videoPredicting) {
       return;
@@ -1003,6 +1017,10 @@ function App() {
         throw new Error(detail);
       }
 
+      const trafficAlertTriggered = response.headers.get("x-traffic-alert") === "1";
+      const maxVehicleCount = Number(response.headers.get("x-vehicle-count-max") || 0);
+      const alertThreshold = Number(response.headers.get("x-alert-threshold") || 0);
+
       const predictedVideoBlob = await response.blob();
       const predictedVideoUrl = URL.createObjectURL(predictedVideoBlob);
 
@@ -1020,6 +1038,25 @@ function App() {
       }
 
       setLogs((prev) => [{ time: nowTime(), text: "Uploaded video processed by AI backend" }, ...prev].slice(0, 10));
+
+      if (trafficAlertTriggered) {
+        showPolicePopup(`Vehicle count ${maxVehicleCount} exceeded threshold ${alertThreshold}`);
+        setLogs((prev) => [
+          {
+            time: nowTime(),
+            text: `Traffic alert triggered (count ${maxVehicleCount} > threshold ${alertThreshold})`,
+          },
+          ...prev,
+        ].slice(0, 10));
+      } else {
+        setLogs((prev) => [
+          {
+            time: nowTime(),
+            text: `Traffic normal (count ${maxVehicleCount}, threshold ${alertThreshold})`,
+          },
+          ...prev,
+        ].slice(0, 10));
+      }
     } catch (error) {
       setVideoPredictError(error?.message || "Could not process uploaded video");
     } finally {
@@ -1041,6 +1078,10 @@ function App() {
 
       if (outputVideoUrlRef.current) {
         URL.revokeObjectURL(outputVideoUrlRef.current);
+      }
+
+      if (policePopupTimerRef.current) {
+        window.clearTimeout(policePopupTimerRef.current);
       }
     };
   }, []);
@@ -1075,6 +1116,13 @@ function App() {
           {theme === "light" ? "Enable Dark Mode" : "Enable Light Mode"}
         </button>
       </nav>
+
+      {policePopup.visible ? (
+        <aside className="police-popup" role="status" aria-live="polite">
+          <strong>Police Alert</strong>
+          <span>{policePopup.message}</span>
+        </aside>
+      ) : null}
 
       <header className="header container reveal is-visible" data-reveal style={revealDelay(0)}>
         <div>

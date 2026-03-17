@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import shutil
 import subprocess
@@ -20,11 +21,18 @@ from fastapi import (
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
-from Video_layer import DEFAULT_WEIGHTS_PATH, VideoPredictor
+from Video_layer import (
+    DEFAULT_ALERT_WEIGHTS_PATH,
+    DEFAULT_WEIGHTS_PATH,
+    AlertVideoAnalyzer,
+    VideoPredictor,
+)
 
 app = FastAPI(title="GreenCorridor Vision API", version="1.0.0")
 
 predictor: VideoPredictor | None = None
+alert_analyzer: AlertVideoAnalyzer | None = None
+ALERT_VEHICLE_THRESHOLD = int(os.getenv("ALERT_VEHICLE_THRESHOLD", "20"))
 
 
 def _safe_unlink(path: Path) -> None:
@@ -64,8 +72,13 @@ def _transcode_to_web_mp4(input_path: Path, output_path: Path) -> bool:
 
 @app.on_event("startup")
 def load_model() -> None:
-    global predictor
+    global predictor, alert_analyzer
     predictor = VideoPredictor(weights_path=DEFAULT_WEIGHTS_PATH)
+    try:
+        alert_analyzer = AlertVideoAnalyzer(weights_path=DEFAULT_ALERT_WEIGHTS_PATH)
+    except Exception as exc:
+        alert_analyzer = None
+        print(f"[startup] alert model unavailable: {exc}")
 
 
 @app.get("/health")
@@ -73,7 +86,10 @@ def health() -> dict:
     return {
         "status": "ok",
         "model_loaded": predictor is not None,
+        "alert_model_loaded": alert_analyzer is not None,
         "weights": str(DEFAULT_WEIGHTS_PATH),
+        "alert_weights": str(DEFAULT_ALERT_WEIGHTS_PATH),
+        "alert_vehicle_threshold": ALERT_VEHICLE_THRESHOLD,
     }
 
 
@@ -212,9 +228,16 @@ async def predict_video_file(
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as output_web_temp:
         output_web_path = Path(output_web_temp.name)
 
+    alert_summary = {
+        "max_vehicles": 0,
+        "avg_vehicles": 0.0,
+    }
+
     try:
         print(f"[fastapi video/file] starting model inference -> {output_path}")
         await run_in_threadpool(predictor.process_video, input_path, output_path)
+        if alert_analyzer is not None:
+            alert_summary = await run_in_threadpool(alert_analyzer.analyze_video, input_path)
         print(f"[fastapi video/file] inference complete, starting transcode -> {output_web_path}")
         web_ready = await run_in_threadpool(_transcode_to_web_mp4, output_path, output_web_path)
         print(f"[fastapi video/file] transcode complete web_ready={web_ready}")
@@ -226,6 +249,10 @@ async def predict_video_file(
         raise HTTPException(status_code=500, detail=f"Video processing failed: {exc}") from exc
 
     serving_path = output_web_path if web_ready else output_path
+    max_vehicles = int(alert_summary.get("max_vehicles", 0))
+    avg_vehicles = float(alert_summary.get("avg_vehicles", 0.0))
+    traffic_alert_triggered = max_vehicles > ALERT_VEHICLE_THRESHOLD
+
     print(f"[fastapi video/file] returning {serving_path}")
 
     _safe_unlink(input_path)
@@ -236,6 +263,12 @@ async def predict_video_file(
         path=str(serving_path),
         filename=f"predicted_{Path(file.filename or 'video').stem}.mp4",
         media_type="video/mp4",
+        headers={
+            "X-Traffic-Alert": "1" if traffic_alert_triggered else "0",
+            "X-Vehicle-Count-Max": str(max_vehicles),
+            "X-Vehicle-Count-Avg": f"{avg_vehicles:.2f}",
+            "X-Alert-Threshold": str(ALERT_VEHICLE_THRESHOLD),
+        },
     )
 
 

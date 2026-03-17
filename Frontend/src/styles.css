@@ -2284,6 +2284,40 @@ tr:last-child td {
   font-size: 0.85rem;
 }
 
+.police-popup {
+  position: fixed;
+  right: 18px;
+  bottom: 20px;
+  z-index: 1200;
+  width: min(320px, calc(100vw - 24px));
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid #f0b9a6;
+  background: linear-gradient(135deg, #fff4ee, #ffe7dc);
+  box-shadow: 0 12px 28px rgba(45, 16, 7, 0.2);
+  color: #8f371c;
+}
+
+.police-popup strong {
+  font-size: 0.84rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.police-popup span {
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+:root[data-theme="dark"] .police-popup {
+  border-color: #8f3b23;
+  background: linear-gradient(135deg, #472012, #5e2a17);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  color: #ffd4c3;
+}
+
 .analytics-panel {
   grid-column: 5 / 13;
 }
