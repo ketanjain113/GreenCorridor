@@ -2861,6 +2861,17 @@ tr:last-child td {
   color: var(--primary);
 }
 
+.nav-tab-toggle-btn {
+  background: color-mix(in srgb, var(--amber) 12%, var(--surface) 88%);
+  color: #9a5b00;
+  font-size: 1rem;
+}
+
+.nav-tab-toggle-btn:hover {
+  background: color-mix(in srgb, var(--amber) 20%, var(--surface) 80%);
+  color: #7a4700;
+}
+
 .nav-search-spinner {
   font-size: 0.78rem;
   color: var(--muted);
@@ -2883,6 +2894,23 @@ tr:last-child td {
   z-index: 100;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+}
+
+.nav-side-tab {
+  position: absolute;
+  top: 96px;
+  right: 16px;
+  width: min(390px, calc(100% - 32px));
+  z-index: 12;
+}
+
+.nav-side-tab .nav-search-results {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  margin: 0;
+  max-height: min(420px, 58vh);
 }
 
 .nav-search-results-list {
@@ -2945,6 +2973,17 @@ tr:last-child td {
   font-size: 0.72rem;
   color: var(--primary);
   font-weight: 600;
+}
+
+.nav-nearby-label {
+  margin: 0;
+  padding: 0.6rem 0.9rem 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0e7be6;
+  border-bottom: 1px solid #ddeaf6;
 }
 
 .nav-search-empty {
@@ -3212,6 +3251,16 @@ tr:last-child td {
   .nav-fab {
     right: 12px;
     bottom: 132px;
+  }
+
+  .nav-side-tab {
+    top: 76px;
+    right: 12px;
+    width: min(340px, calc(100% - 24px));
+  }
+
+  .nav-side-tab .nav-search-results {
+    max-height: min(300px, 42vh);
   }
 }
 

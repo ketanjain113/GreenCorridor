@@ -4,43 +4,43 @@ import L from "leaflet";
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:4000";
 
 const HOSPITAL = {
-  name: "City Hospital",
-  coord: [28.6224, 77.2198],
+  name: "MY Hospital, Indore",
+  coord: [22.7281, 75.8685],
 };
 
 const ROUTES = {
   alpha: {
     name: "Route Alpha",
     points: [
-      [28.6139, 77.209],
-      [28.6152, 77.2115],
-      [28.6167, 77.2142],
-      [28.6183, 77.2168],
-      [28.62, 77.2182],
-      [28.6214, 77.219],
-      [28.6224, 77.2198],
+      [22.7196, 75.8577],
+      [22.7209, 75.8602],
+      [22.7224, 75.8629],
+      [22.724, 75.8655],
+      [22.7257, 75.8669],
+      [22.7271, 75.8677],
+      [22.7281, 75.8685],
     ],
     intersections: [
-      { id: "A", pointIndex: 1, coord: [28.6152, 77.2115] },
-      { id: "B", pointIndex: 3, coord: [28.6183, 77.2168] },
-      { id: "C", pointIndex: 5, coord: [28.6214, 77.219] },
+      { id: "A", pointIndex: 1, coord: [22.7209, 75.8602] },
+      { id: "B", pointIndex: 3, coord: [22.724, 75.8655] },
+      { id: "C", pointIndex: 5, coord: [22.7271, 75.8677] },
     ],
   },
   beta: {
     name: "Route Beta",
     points: [
-      [28.6112, 77.2068],
-      [28.6129, 77.2105],
-      [28.6148, 77.2137],
-      [28.6164, 77.216],
-      [28.6187, 77.2177],
-      [28.6209, 77.2188],
-      [28.6224, 77.2198],
+      [22.7169, 75.8555],
+      [22.7186, 75.8592],
+      [22.7205, 75.8624],
+      [22.7221, 75.8647],
+      [22.7244, 75.8664],
+      [22.7266, 75.8675],
+      [22.7281, 75.8685],
     ],
     intersections: [
-      { id: "A", pointIndex: 1, coord: [28.6129, 77.2105] },
-      { id: "B", pointIndex: 2, coord: [28.6148, 77.2137] },
-      { id: "D", pointIndex: 4, coord: [28.6187, 77.2177] },
+      { id: "A", pointIndex: 1, coord: [22.7186, 75.8592] },
+      { id: "B", pointIndex: 2, coord: [22.7205, 75.8624] },
+      { id: "D", pointIndex: 4, coord: [22.7244, 75.8664] },
     ],
   },
 };
@@ -194,6 +194,9 @@ function App() {
   const [navUserLocation, setNavUserLocation] = useState(null);
   const [navGpsLoading, setNavGpsLoading] = useState(false);
   const [navGpsError, setNavGpsError] = useState("");
+  const [navNearbyHospitals, setNavNearbyHospitals] = useState([]);
+  const [navNearbyHospitalsLoading, setNavNearbyHospitalsLoading] = useState(false);
+  const [navSideTabOpen, setNavSideTabOpen] = useState(true);
   const [webcamRunning, setWebcamRunning] = useState(false);
   const [webcamConnecting, setWebcamConnecting] = useState(false);
   const [webcamError, setWebcamError] = useState("");
@@ -524,7 +527,7 @@ function App() {
         if (next >= route.points.length) {
           setIsRunning(false);
           setLogs((prev) => [{ time: nowTime(), text: "Emergency Vehicle reached destination" }, ...prev].slice(0, 10));
-          setAlerts(["Emergency Vehicle reached City Hospital", "Route completed successfully"]);
+          setAlerts(["Emergency Vehicle reached MY Hospital, Indore", "Route completed successfully"]);
           return current;
         }
 
@@ -595,13 +598,14 @@ function App() {
       setNavRoute(null);
       setNavNavigating(false);
       setNavGpsError("");
+      setNavSideTabOpen(true);
       return;
     }
     const tid = setTimeout(() => {
       const el = navMapElementRef.current;
       if (!el || navInitRef.current) return;
       navInitRef.current = true;
-      const startCoord = navStartCoordRef.current || [28.6139, 77.209];
+      const startCoord = navStartCoordRef.current || [22.7196, 75.8577];
       const map = L.map(el, { zoomControl: false }).setView(startCoord, 14);
       L.control.zoom({ position: "bottomright" }).addTo(map);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -629,7 +633,7 @@ function App() {
     if (!navOpen || !baseLayer) return;
     baseLayer.clearLayers();
 
-    const startCoord = navUserLocation?.coord || navStartCoordRef.current || [28.6139, 77.209];
+    const startCoord = navUserLocation?.coord || navStartCoordRef.current || [22.7196, 75.8577];
 
     L.circleMarker(startCoord, {
       radius: 12,
@@ -655,7 +659,27 @@ function App() {
     }
   }, [navOpen, navUserLocation]);
 
-  // Nav search (Nominatim)
+  // Nearby hospitals — fetched once when nav opens
+  useEffect(() => {
+    if (!navOpen) return;
+
+    const center = navUserLocation?.coord || navStartCoordRef.current || [22.7196, 75.8577];
+    const [lat, lon] = center;
+    const r = 0.35;
+    const viewbox = `${lon - r},${lat + r},${lon + r},${lat - r}`;
+
+    setNavNearbyHospitalsLoading(true);
+    fetch(
+      `https://nominatim.openstreetmap.org/search?q=hospital&countrycodes=in&format=json&limit=5&viewbox=${viewbox}&bounded=1`,
+      { headers: { "Accept-Language": "en-US,en;q=0.9" } }
+    )
+      .then((r) => r.json())
+      .then((data) => setNavNearbyHospitals(data))
+      .catch(() => setNavNearbyHospitals([]))
+      .finally(() => setNavNearbyHospitalsLoading(false));
+  }, [navOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Nav search (Nominatim — India biased)
   useEffect(() => {
     clearTimeout(navSearchTimerRef.current);
     if (!navSearchQuery.trim()) {
@@ -664,9 +688,13 @@ function App() {
     }
     const tid = setTimeout(async () => {
       setNavSearchLoading(true);
+      const center = navUserLocation?.coord || navStartCoordRef.current || [22.7196, 75.8577];
+      const [lat, lon] = center;
+      const r = 2.5;
+      const viewbox = `${lon - r},${lat + r},${lon + r},${lat - r}`;
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(navSearchQuery)}&format=json&limit=6`,
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(navSearchQuery)}&countrycodes=in&viewbox=${viewbox}&format=json&limit=6`,
           { headers: { "Accept-Language": "en-US,en;q=0.9" } }
         );
         const data = await res.json();
@@ -679,12 +707,12 @@ function App() {
     }, 500);
     navSearchTimerRef.current = tid;
     return () => clearTimeout(tid);
-  }, [navSearchQuery]);
+  }, [navSearchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch route via OSRM when destination is set
   useEffect(() => {
     if (!navDestination) return;
-    const start = navUserLocation?.coord || navStartCoordRef.current || [28.6139, 77.209];
+    const start = navUserLocation?.coord || navStartCoordRef.current || [22.7196, 75.8577];
     const [startLat, startLon] = start;
     const [endLat, endLon] = navDestination.coord;
     setNavRoute(null);
@@ -1137,118 +1165,27 @@ function App() {
         </div>
       </header>
 
-      <section className="container reveal is-visible" data-reveal style={revealDelay(30)}>
-        <div className="hero-visual-card">
-          <div className="green-corridor-3d" aria-hidden="true">
-            {/* Night-sky environment */}
-            <div className="gc-night-sky" />
-            <div className="gc-city-bg" />
-            <div className="gc-horizon-haze" />
-            <div className="gc-stars" />
-
-            {/* Branding */}
-            <div className="gc-title-wrap">
-              <div className="gc-title-block">
-                <span className="gc-title-main">GREEN</span>
-                <span className="gc-title-sub">CORRIDOR</span>
-                <span className="gc-title-caption">SMART TRAFFIC | EMERGENCY RESPONSE</span>
-              </div>
-              <div className="gc-live-pill">
-                <span className="gc-live-dot" />
-                <span className="gc-live-label">LIVE</span>
-              </div>
-            </div>
-
-            {/* 3D Road scene */}
-            <div className="gc-road-scene">
-              {/* Asphalt road with perspective */}
-              <div className="gc-road-asphalt">
-                <div className="gc-road-sheen" />
-                <div className="gc-curb gc-curb-top" />
-                <div className="gc-curb gc-curb-bot" />
-                <span className="gc-lm gc-lm-1" />
-                <span className="gc-lm gc-lm-2" />
-                <span className="gc-lm gc-lm-3" />
-                <span className="gc-lm gc-lm-4" />
-                <span className="gc-lm gc-lm-5" />
-                <div className="gc-road-centerline" />
-              </div>
-
-              {/* Traffic signal with pole */}
-              <div className="gc-sig-post">
-                <div className="gc-sig-pole" />
-                <div className="gc-sig-head">
-                  <span className="gc-sig-lens l-red" />
-                  <span className="gc-sig-lens l-amber" />
-                  <span className="gc-sig-lens l-green" />
-                </div>
-                <div className="gc-sig-glow-spill" />
-              </div>
-
-              {/* Detailed emergency vehicle */}
-              <div className="gc-emergency-vehicle">
-                {/* Roof lightbar assembly */}
-                <div className="gc-v-lightbar">
-                  <span className="gc-lb lb-r1" />
-                  <span className="gc-lb lb-b" />
-                  <span className="gc-lb lb-r2" />
-                </div>
-                {/* Beacon colour cast on road */}
-                <div className="gc-v-beacon-cast" />
-                {/* Body: cab + box */}
-                <div className="gc-v-body">
-                  <div className="gc-v-cab">
-                    <span className="gc-v-screen" />
-                    <span className="gc-v-mirror" />
-                    <span className="gc-v-hl" />
-                    <span className="gc-v-bumper" />
-                  </div>
-                  <div className="gc-v-box">
-                    <span className="gc-v-stripe" />
-                    <span className="gc-v-sidewin" />
-                    <span className="gc-v-cross">+</span>
-                    <span className="gc-v-door-line" />
-                    <span className="gc-v-rear-light" />
-                  </div>
-                </div>
-                {/* Undercarriage */}
-                <div className="gc-v-floor" />
-                {/* Wheels */}
-                <span className="gc-v-wheel wh-f" />
-                <span className="gc-v-wheel wh-r" />
-                {/* Ground shadow */}
-                <div className="gc-v-shadow" />
-                {/* Headlight beam */}
-                <div className="gc-v-headbeam" />
-              </div>
-            </div>
+      <section className="container reveal is-visible" data-reveal style={revealDelay(20)}>
+        <section className="panel map-panel">
+          <div className="panel-head">
+            <h2>Live Map Tracking</h2>
+            <span className="route-chip">{route.name}</span>
+            <button
+              type="button"
+              className="nav-open-btn"
+              onClick={() => {
+                navStartCoordRef.current = currentCoord;
+                setNavOpen(true);
+              }}
+            >
+              ⛶ Navigate
+            </button>
           </div>
-          <div className="hero-visual-copy">
-            <h2>Live Operational Snapshot</h2>
-            <p>
-              This dashboard is actively coordinating emergency priority through route tracking, camera intelligence, and adaptive
-              signal control. Current corridor status updates in real time as field conditions change.
-            </p>
-            <div className="hero-metrics" role="list" aria-label="Live product metrics">
-              <article className="hero-metric" role="listitem">
-                <span>Current Speed</span>
-                <strong>{speedKmh} km/h</strong>
-              </article>
-              <article className="hero-metric" role="listitem">
-                <span>Active AI Detections</span>
-                <strong>{detectedCameraCount}/3 cameras</strong>
-              </article>
-              <article className="hero-metric" role="listitem">
-                <span>Estimated Arrival</span>
-                <strong>{emergencyVehicleEtaMinutes} min</strong>
-              </article>
-              <article className="hero-metric" role="listitem">
-                <span>Signal Priority Window</span>
-                <strong>{nextSignalLabel} • {greenSignalCount}/{signalRows.length} green</strong>
-              </article>
-            </div>
+          <div className="map-area" ref={mapElementRef} />
+          <div className="map-caption">
+            Emergency vehicle position, route path, intersection signal states, and hospital destination are updated continuously.
           </div>
-        </div>
+        </section>
       </section>
 
       <main className="page-sections">
@@ -1382,27 +1319,6 @@ function App() {
             </section>
 
             <div className="dashboard primary-grid">
-              <section className="panel map-panel reveal" data-reveal style={revealDelay(60)}>
-                <div className="panel-head">
-                  <h2>Live Map Tracking</h2>
-                  <span className="route-chip">{route.name}</span>
-                  <button
-                    type="button"
-                    className="nav-open-btn"
-                    onClick={() => {
-                      navStartCoordRef.current = currentCoord;
-                      setNavOpen(true);
-                    }}
-                  >
-                    ⛶ Navigate
-                  </button>
-                </div>
-                <div className="map-area" ref={mapElementRef} />
-                <div className="map-caption">
-                  Emergency vehicle position, route path, intersection signal states, and hospital destination are updated continuously.
-                </div>
-              </section>
-
               <section className="panel emergency-vehicle-panel reveal" data-reveal style={revealDelay(120)}>
                 <h2>Emergency Vehicle Monitoring</h2>
                 <ul className="kv-list">
@@ -1461,6 +1377,120 @@ function App() {
                   </div>
                 ))}
               </section>
+            </div>
+          </div>
+        </section>
+
+        <section className="container reveal is-visible" data-reveal style={revealDelay(30)}>
+          <div className="hero-visual-card">
+            <div className="green-corridor-3d" aria-hidden="true">
+              {/* Night-sky environment */}
+              <div className="gc-night-sky" />
+              <div className="gc-city-bg" />
+              <div className="gc-horizon-haze" />
+              <div className="gc-stars" />
+
+              {/* Branding */}
+              <div className="gc-title-wrap">
+                <div className="gc-title-block">
+                  <span className="gc-title-main">GREEN</span>
+                  <span className="gc-title-sub">CORRIDOR</span>
+                  <span className="gc-title-caption">SMART TRAFFIC | EMERGENCY RESPONSE</span>
+                </div>
+                <div className="gc-live-pill">
+                  <span className="gc-live-dot" />
+                  <span className="gc-live-label">LIVE</span>
+                </div>
+              </div>
+
+              {/* 3D Road scene */}
+              <div className="gc-road-scene">
+                {/* Asphalt road with perspective */}
+                <div className="gc-road-asphalt">
+                  <div className="gc-road-sheen" />
+                  <div className="gc-curb gc-curb-top" />
+                  <div className="gc-curb gc-curb-bot" />
+                  <span className="gc-lm gc-lm-1" />
+                  <span className="gc-lm gc-lm-2" />
+                  <span className="gc-lm gc-lm-3" />
+                  <span className="gc-lm gc-lm-4" />
+                  <span className="gc-lm gc-lm-5" />
+                  <div className="gc-road-centerline" />
+                </div>
+
+                {/* Traffic signal with pole */}
+                <div className="gc-sig-post">
+                  <div className="gc-sig-pole" />
+                  <div className="gc-sig-head">
+                    <span className="gc-sig-lens l-red" />
+                    <span className="gc-sig-lens l-amber" />
+                    <span className="gc-sig-lens l-green" />
+                  </div>
+                  <div className="gc-sig-glow-spill" />
+                </div>
+
+                {/* Detailed emergency vehicle */}
+                <div className="gc-emergency-vehicle">
+                  {/* Roof lightbar assembly */}
+                  <div className="gc-v-lightbar">
+                    <span className="gc-lb lb-r1" />
+                    <span className="gc-lb lb-b" />
+                    <span className="gc-lb lb-r2" />
+                  </div>
+                  {/* Beacon colour cast on road */}
+                  <div className="gc-v-beacon-cast" />
+                  {/* Body: cab + box */}
+                  <div className="gc-v-body">
+                    <div className="gc-v-cab">
+                      <span className="gc-v-screen" />
+                      <span className="gc-v-mirror" />
+                      <span className="gc-v-hl" />
+                      <span className="gc-v-bumper" />
+                    </div>
+                    <div className="gc-v-box">
+                      <span className="gc-v-stripe" />
+                      <span className="gc-v-sidewin" />
+                      <span className="gc-v-cross">+</span>
+                      <span className="gc-v-door-line" />
+                      <span className="gc-v-rear-light" />
+                    </div>
+                  </div>
+                  {/* Undercarriage */}
+                  <div className="gc-v-floor" />
+                  {/* Wheels */}
+                  <span className="gc-v-wheel wh-f" />
+                  <span className="gc-v-wheel wh-r" />
+                  {/* Ground shadow */}
+                  <div className="gc-v-shadow" />
+                  {/* Headlight beam */}
+                  <div className="gc-v-headbeam" />
+                </div>
+              </div>
+            </div>
+            <div className="hero-visual-copy">
+              <h2>Live Operational Snapshot</h2>
+              <p>
+                This dashboard is actively coordinating emergency priority through route tracking, camera intelligence, and adaptive
+                signal control. Current corridor status updates in real time as field conditions change.
+              </p>
+              <div className="hero-metrics" role="list" aria-label="Live product metrics">
+                <article className="hero-metric" role="listitem">
+                  <span>Current Speed</span>
+                  <strong>{speedKmh} km/h</strong>
+                </article>
+                <article className="hero-metric" role="listitem">
+                  <span>Active AI Detections</span>
+                  <strong>{detectedCameraCount}/3 cameras</strong>
+                </article>
+                <article className="hero-metric" role="listitem">
+                  <span>Estimated Arrival</span>
+                  <strong>{emergencyVehicleEtaMinutes} min</strong>
+                </article>
+                <article className="hero-metric" role="listitem">
+                  <span>Signal Priority Window</span>
+                  <strong>{nextSignalLabel} • {greenSignalCount}/{signalRows.length} green</strong>
+                </article>
+              </div>
             </div>
           </div>
         </section>
@@ -1674,58 +1704,108 @@ function App() {
                     >
                       {navGpsLoading ? "..." : "◎"}
                     </button>
+                    <button
+                      type="button"
+                      className="nav-ghost-icon-btn nav-tab-toggle-btn"
+                      onClick={() => setNavSideTabOpen((prev) => !prev)}
+                      aria-label={navSideTabOpen ? "Hide nearby hospitals tab" : "Show nearby hospitals tab"}
+                      title={navSideTabOpen ? "Hide nearby hospitals tab" : "Show nearby hospitals tab"}
+                    >
+                      {navSideTabOpen ? "▤" : "▥"}
+                    </button>
                   </div>
                 </div>
 
-                {(navSearchResults.length > 0 || (!!navSearchQuery.trim() && !navSearchLoading) || navGpsError) && (
-                  <div className="nav-search-results" role="listbox">
-                    {navSearchResults.length > 0 ? (
-                      <ul className="nav-search-results-list">
-                        {navSearchResults.map((result) => (
-                          <li
-                            key={result.place_id}
-                            role="option"
-                            onClick={() => {
-                              setNavDestination({
-                                name: result.display_name,
-                                coord: [parseFloat(result.lat), parseFloat(result.lon)],
-                              });
-                              setNavSearchQuery(result.display_name);
-                              setNavSearchResults([]);
-
-                              if (navMapRef.current) {
-                                navMapRef.current.flyTo([parseFloat(result.lat), parseFloat(result.lon)], 15, {
-                                  duration: 1,
-                                });
-                              }
-                            }}
-                          >
-                            <span className="nav-result-badge" aria-hidden="true">
-                              •
-                            </span>
-                            <span className="nav-result-copy">
-                              <span className="nav-result-name">{result.name || result.display_name.split(",")[0]}</span>
-                              <span className="nav-result-addr">{result.display_name}</span>
-                              <span className="nav-result-meta">Tap to set destination and build route</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="nav-search-empty">
-                        <strong>No matching places found.</strong>
-                        <span>Try a landmark, hospital, neighborhood, or tap directly on the map.</span>
-                      </div>
-                    )}
-
-                    {navGpsError ? <p className="nav-gps-note">{navGpsError}</p> : null}
-                  </div>
-                )}
               </div>
             )}
           </div>
 
           <div className="nav-map-area" ref={navMapElementRef} />
+
+          {!navNavigating && navSideTabOpen &&
+          ((!navSearchQuery.trim() && (navNearbyHospitals.length > 0 || navNearbyHospitalsLoading)) ||
+            (navSearchResults.length > 0 || (!!navSearchQuery.trim() && !navSearchLoading) || navGpsError)) ? (
+            <aside className="nav-side-tab" role="listbox" aria-label="Search suggestions">
+              {(!navSearchQuery.trim() && (navNearbyHospitals.length > 0 || navNearbyHospitalsLoading)) ? (
+                <div className="nav-search-results">
+                  <p className="nav-nearby-label">
+                    {navNearbyHospitalsLoading ? "Finding nearby hospitals…" : "Nearby Hospitals"}
+                  </p>
+                  {!navNearbyHospitalsLoading && (
+                    <ul className="nav-search-results-list">
+                      {navNearbyHospitals.map((h) => (
+                        <li
+                          key={h.place_id}
+                          role="option"
+                          onClick={() => {
+                            setNavDestination({
+                              name: h.display_name,
+                              coord: [parseFloat(h.lat), parseFloat(h.lon)],
+                            });
+                            setNavSearchQuery(h.display_name);
+                            setNavSearchResults([]);
+                            if (navMapRef.current) {
+                              navMapRef.current.flyTo([parseFloat(h.lat), parseFloat(h.lon)], 15, { duration: 1 });
+                            }
+                          }}
+                        >
+                          <span className="nav-result-badge" aria-hidden="true">🏥</span>
+                          <span className="nav-result-copy">
+                            <span className="nav-result-name">{h.name || h.display_name.split(",")[0]}</span>
+                            <span className="nav-result-addr">{h.display_name}</span>
+                            <span className="nav-result-meta">Tap to get directions</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {navGpsError ? <p className="nav-gps-note">{navGpsError}</p> : null}
+                </div>
+              ) : (
+                <div className="nav-search-results">
+                  {navSearchResults.length > 0 ? (
+                    <ul className="nav-search-results-list">
+                      {navSearchResults.map((result) => (
+                        <li
+                          key={result.place_id}
+                          role="option"
+                          onClick={() => {
+                            setNavDestination({
+                              name: result.display_name,
+                              coord: [parseFloat(result.lat), parseFloat(result.lon)],
+                            });
+                            setNavSearchQuery(result.display_name);
+                            setNavSearchResults([]);
+
+                            if (navMapRef.current) {
+                              navMapRef.current.flyTo([parseFloat(result.lat), parseFloat(result.lon)], 15, {
+                                duration: 1,
+                              });
+                            }
+                          }}
+                        >
+                          <span className="nav-result-badge" aria-hidden="true">
+                            •
+                          </span>
+                          <span className="nav-result-copy">
+                            <span className="nav-result-name">{result.name || result.display_name.split(",")[0]}</span>
+                            <span className="nav-result-addr">{result.display_name}</span>
+                            <span className="nav-result-meta">Tap to set destination and build route</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="nav-search-empty">
+                      <strong>No matching places found.</strong>
+                      <span>Try a landmark, hospital, neighborhood, or tap directly on the map.</span>
+                    </div>
+                  )}
+                  {navGpsError ? <p className="nav-gps-note">{navGpsError}</p> : null}
+                </div>
+              )}
+            </aside>
+          ) : null}
 
           <button
             type="button"
