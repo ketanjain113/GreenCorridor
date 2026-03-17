@@ -198,10 +198,4 @@ python detect.py
 
 ### 👨‍💻 Contributors
 
-[Ketan Jain]('github.com/ketanjain113),
-
-[Kavish Jain]('github.com/kavish200),
-
-[Sarthak Mahajan]('github.com/sarthakm811),
-
-[Prayagi Sahajwani]('github.com/prayagi)
+[Ketan Jain]('github.com/ketanjain113), [Kavish Jain]('github.com/kavish200), [Sarthak Mahajan]('github.com/sarthakm811), [Prayagi Sahajwani]('github.com/prayagi)
