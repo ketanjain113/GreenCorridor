@@ -4,9 +4,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "backend:dev": "npm --prefix Backend run dev",
+    "backend:start": "npm --prefix Backend run start",
+    "dev": "npm --prefix Frontend run dev",
+    "build": "npm --prefix Frontend run build",
+    "preview": "npm --prefix Frontend run preview"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

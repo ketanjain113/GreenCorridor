@@ -1,0 +1,23 @@
+# Node dependencies
+node_modules/
+Frontend/node_modules/
+Backend/node_modules/
+
+# Python environments
+.venv/
+venv/
+Backend/venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+dist/
+build/
+
+# Logs and OS files
+*.log
+.DS_Store
