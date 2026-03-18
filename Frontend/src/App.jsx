@@ -1593,12 +1593,7 @@ function App() {
         <div className="section-nav-left">
           <a href="#" className="nav-brand" aria-label="Green Corridor home">
             <span className="nav-brand-logo-shell" aria-hidden="true">
-              <img
-                src="/WhatsApp_Image_2026-03-17_at_2.06.25_PM-removebg-preview.png"
-                alt="Siren logo"
-                className="nav-brand-logo"
-                loading="eager"
-              />
+              <span className="nav-brand-mark">GC</span>
             </span>
           </a>
 
