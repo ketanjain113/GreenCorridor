@@ -239,3 +239,41 @@ Optional variables:
 
 - In production, frontend API/socket calls default to same origin automatically.
 - Local development still uses `http://127.0.0.1:4000` when `VITE_BACKEND_URL` is not set.
+
+## ☁️ Deploy On Render (Free Tier)
+
+This repo now includes a Render Blueprint file: `render.yaml`.
+
+### Option A: One-click Blueprint (recommended)
+
+1. In Render, click **New +** → **Blueprint**.
+2. Connect this GitHub repository.
+3. Render will detect `render.yaml` and create 2 web services:
+	- `green-corridor-model` (Docker, from `Model/Dockerfile`)
+	- `green-corridor-web` (Node, from root)
+4. After first deploy, open `green-corridor-model` and copy its public URL.
+5. In `green-corridor-web` environment variables, set:
+	- `FASTAPI_BASE_URL=https://<your-model-service>.onrender.com`
+6. Redeploy `green-corridor-web`.
+
+### Option B: Manual setup
+
+Create 2 Render services from the same repository.
+
+Model service:
+- Runtime: Docker
+- Dockerfile path: `Model/Dockerfile`
+- Docker context: `Model`
+- Health check path: `/health`
+
+Web service:
+- Runtime: Node
+- Root directory: project root
+- Build command: `npm run render:build`
+- Start command: `npm run start`
+- Health check path: `/health`
+- Env var: `FASTAPI_BASE_URL=https://<your-model-service>.onrender.com`
+
+### Free tier note
+
+Render free services can sleep when idle, so first request after inactivity may take extra time.

@@ -10,7 +10,8 @@
     "build": "npm --prefix Frontend run build",
     "preview": "npm --prefix Frontend run preview",
     "start": "npm --prefix Backend run start",
-    "railway:build": "npm --prefix Frontend ci && npm --prefix Backend ci && npm --prefix Frontend run build"
+    "railway:build": "npm --prefix Frontend ci && npm --prefix Backend ci && npm --prefix Frontend run build",
+    "render:build": "npm --prefix Frontend ci && npm --prefix Backend ci && npm --prefix Frontend run build"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

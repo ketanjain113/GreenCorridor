@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: green-corridor-model
+    runtime: docker
+    dockerfilePath: ./Model/Dockerfile
+    dockerContext: ./Model
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+
+  - type: web
+    name: green-corridor-web
+    runtime: node
+    rootDir: .
+    buildCommand: npm run render:build
+    startCommand: npm run start
+    healthCheckPath: /health
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: FASTAPI_BASE_URL
+        sync: false
+      - key: TRACKING_EMIT_INTERVAL_MS
+        value: "200"
+      - key: DEMO_MODE
+        value: "0"
