@@ -7,11 +7,12 @@
     "backend:dev": "npm --prefix Backend run dev",
     "backend:start": "npm --prefix Backend run start",
     "dev": "npm --prefix Frontend run dev",
-    "build": "npm --prefix Frontend run build",
+    "build": "npm --prefix Frontend ci && npm --prefix Backend ci && npm --prefix Frontend run build",
+    "build:frontend": "npm --prefix Frontend run build",
     "preview": "npm --prefix Frontend run preview",
-    "start": "npm --prefix Backend run start",
-    "railway:build": "npm --prefix Frontend ci && npm --prefix Backend ci && npm --prefix Frontend run build",
-    "render:build": "npm --prefix Frontend ci && npm --prefix Backend ci && npm --prefix Frontend run build"
+    "start": "npm --prefix Backend ci && npm --prefix Backend run start",
+    "railway:build": "npm run build",
+    "render:build": "npm run build"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
