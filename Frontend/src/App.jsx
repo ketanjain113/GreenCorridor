@@ -3,7 +3,9 @@ import L from "leaflet";
 import { io } from "socket.io-client";
 import LiveEtaCountdown from "./LiveEtaCountdown";
 
-const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:4000";
+const BACKEND_BASE_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  (import.meta.env.DEV ? "http://127.0.0.1:4000" : window.location.origin);
 
 const HOSPITAL = {
   name: "MY Hospital, Indore",

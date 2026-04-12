@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 
-const BACKEND_SOCKET_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:4000";
+const BACKEND_SOCKET_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  (import.meta.env.DEV ? "http://127.0.0.1:4000" : window.location.origin);
 
 export default function SocketUpdatesPanel({ maxItems = 20 }) {
   const [updates, setUpdates] = useState([]);

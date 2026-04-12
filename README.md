@@ -199,3 +199,43 @@ python detect.py
 ### 👨‍💻 Contributors
 
 [Ketan Jain]('github.com/ketanjain113), [Kavish Jain]('github.com/kavish200), [Sarthak Mahajan]('github.com/sarthakm811), [Prayagi Sahajwani]('github.com/prayagi)
+
+## ☁️ Deploy On Railway
+
+This repository is configured for a 2-service Railway deployment:
+
+1. `green-corridor-model` service from `Model/` (FastAPI + YOLO)
+2. `green-corridor-web` service from project root (Node backend + built React frontend)
+
+### 1) Create Model Service
+
+- In Railway, create a new service from this repo.
+- Set the **Root Directory** to `Model`.
+- Railway will use `Model/railway.toml` and `Model/Dockerfile`.
+- Wait for deploy and copy the generated public URL.
+
+### 2) Create Web Service
+
+- Create another service from the same repo.
+- Keep **Root Directory** as project root.
+- Railway will use root `railway.toml`.
+
+Set this environment variable on the web service:
+
+- `FASTAPI_BASE_URL=https://<your-model-service>.up.railway.app`
+
+Optional variables:
+
+- `TRACKING_EMIT_INTERVAL_MS=200`
+- `DEMO_MODE=0`
+
+### 3) Connect and Verify
+
+- Open your web service URL.
+- Check health endpoint: `https://<your-web-service>.up.railway.app/health`
+- The response should show both Node status and FastAPI connectivity.
+
+### Notes
+
+- In production, frontend API/socket calls default to same origin automatically.
+- Local development still uses `http://127.0.0.1:4000` when `VITE_BACKEND_URL` is not set.

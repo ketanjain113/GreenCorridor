@@ -1,4 +1,6 @@
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import axios from "axios";
 import cors from "cors";
@@ -10,6 +12,10 @@ import WebSocket, { WebSocketServer } from "ws";
 
 const app = express();
 const server = http.createServer(app);
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const FRONTEND_DIST_PATH = path.resolve(__dirname, "../Frontend/dist");
 
 const PORT = Number(process.env.PORT || 4000);
 const FASTAPI_BASE_URL = process.env.FASTAPI_BASE_URL || "http://127.0.0.1:8000";
@@ -37,6 +43,7 @@ const io = new SocketIOServer(server, {
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(FRONTEND_DIST_PATH));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -410,6 +417,22 @@ app.post("/api/predict/video/stream", upload.single("video"), async (req, res) =
   }
 });
 
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/") || req.path === "/health" || req.path.startsWith("/ws/")) {
+    next();
+    return;
+  }
+
+  res.sendFile(path.join(FRONTEND_DIST_PATH, "index.html"), (error) => {
+    if (error) {
+      res.status(503).json({
+        message: "Frontend build is not available",
+        details: "Run `npm --prefix Frontend run build` before starting backend in production",
+      });
+    }
+  });
+});
+
 const wss = new WebSocketServer({ server, path: "/ws/live" });
 
 wss.on("error", (error) => {
@@ -493,7 +516,7 @@ server.on("error", (error) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Node backend listening on http://127.0.0.1:${PORT}`);
+  console.log(`Node backend listening on http://0.0.0.0:${PORT}`);
   console.log(`Proxy target FastAPI: ${FASTAPI_BASE_URL}`);
-  console.log(`Socket.IO enabled at ws://127.0.0.1:${PORT}/socket.io`);
+  console.log(`Socket.IO enabled at ws://0.0.0.0:${PORT}/socket.io`);
 });

@@ -18,12 +18,6 @@ DEFAULT_GREEN_ETA_THRESHOLD_SECONDS = 10.0
 
 
 def decide_signal_state(eta: float | None, green_threshold_seconds: float = DEFAULT_GREEN_ETA_THRESHOLD_SECONDS) -> dict[str, Any]:
-    """Return traffic signal state from ETA.
-
-    Rule:
-    - eta < threshold => GREEN
-    - otherwise => RED
-    """
     signal = "GREEN" if eta is not None and eta < green_threshold_seconds else "RED"
     return {
         "signal": signal,
@@ -32,8 +26,6 @@ def decide_signal_state(eta: float | None, green_threshold_seconds: float = DEFA
 
 
 class VideoPredictor:
-    """Loads YOLO weights once and exposes frame/video tracking helpers."""
-
     def __init__(
         self,
         weights_path: Optional[str | Path] = None,
@@ -57,7 +49,6 @@ class VideoPredictor:
         self.latest_speed_eta: list[dict[str, Any]] = []
 
     def _track_frame(self, frame):
-        """Run YOLO tracking on a single BGR frame."""
         results = self.model.track(
             frame,
             conf=self.confidence,
@@ -71,7 +62,6 @@ class VideoPredictor:
         return results[0]
 
     def extract_tracked_objects(self, result) -> list[dict[str, Any]]:
-        """Convert a YOLO result to structured tracked-object records."""
         tracked_objects: list[dict[str, Any]] = []
         boxes = result.boxes
         if boxes is None or getattr(boxes, "xyxy", None) is None:
@@ -104,7 +94,7 @@ class VideoPredictor:
         return ((x1 + x2) / 2.0, (y1 + y2) / 2.0)
 
     def compute_speed_eta(self, tracked_objects: list[dict[str, Any]], timestamp: float | None = None) -> list[dict[str, Any]]:
-        """Compute speed and ETA per track ID using previous center positions."""
+
         current_time = timestamp if timestamp is not None else time.monotonic()
         speed_eta_records: list[dict[str, Any]] = []
 
@@ -141,7 +131,6 @@ class VideoPredictor:
         return speed_eta_records
 
     def annotate_frame_with_tracks(self, frame):
-        """Track objects on a frame and return (annotated_frame, tracked_objects)."""
         result = self._track_frame(frame)
         tracked_objects = self.extract_tracked_objects(result)
         speed_eta_records = self.compute_speed_eta(tracked_objects)
